@@ -1,7 +1,7 @@
 
 use erupt::{vk::{self}};
+use super::{device::Physical};
 
-use super::device::Physical;
 
 pub struct Command {
     pub pool: vk::CommandPool,

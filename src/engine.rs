@@ -3,6 +3,8 @@ mod device;
 mod swapchain;
 mod renderpass;
 mod commands;
+mod sync;
+mod pipeline;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -25,12 +27,12 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::engine::{commands::Command, device::Physical, mesh::{Vertex, Verticies}, renderpass::RenderPass, swapchain::Swapchain};
+use crate::engine::{commands::Command, device::Physical, mesh::{Vertex, Verticies}, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
+
+use self::pipeline::PipelineStruct;
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
-const FRAG: &[u32] = include_glsl!("src/shaders/colored-triangle.frag", kind: frag);
-const TRIMESH: &[u32] = include_glsl!("src/shaders/trimesh.vert");
 
 //debug_callback for the validation layers
 unsafe extern "system" fn debug_callback(
@@ -93,141 +95,12 @@ impl VulkanApp {
         let render_pass = RenderPass::new(&mut physical, &swapchain);
         
         let command = Command::new(&physical);
+
+        let sync = SyncStructs::new(&physical);
+
+        let pipeline = PipelineStruct::new(&physical, &render_pass);
         
-
-
-        let fence_info = vk::FenceCreateInfoBuilder::new().flags(vk::FenceCreateFlags::SIGNALED);
-        //we want to create the fence with the Create Signaled flag, so we can wait on it before using it on a GPU command (for the first frame)
-
-        //don't need any info for the semaphore
-        let mut semaphore_create_info = vk::SemaphoreCreateInfoBuilder::new();
-
-        let render_semaphore =
-            unsafe { physical.device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
-        let present_semaphore =
-            unsafe {  physical.device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
-
-        let mut render_fence: Vec<vk::Fence> = Vec::new();
-        render_fence.push(unsafe {  physical.device.create_fence(&fence_info, None, None) }.unwrap());
-
-        //Pipeline starts here
-        //Shader Modules
-        let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(FRAG);
-        let frag_module = unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
-        let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(TRIMESH);
-        let entry_point = CString::new("main").unwrap();
-        let tri_mesh =
-            unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
-
     
-        let shader_stages = vec![
-            vk::PipelineShaderStageCreateInfoBuilder::new()
-                .stage(vk::ShaderStageFlagBits::VERTEX)
-                .module(tri_mesh)
-                .name(&entry_point),
-            vk::PipelineShaderStageCreateInfoBuilder::new()
-                .stage(vk::ShaderStageFlagBits::FRAGMENT)
-                .module(frag_module)
-                .name(&entry_point),
-        ];
-        //like openGL VAO, not using it atm
-        let vertex_desc = mesh::VertexDesc::new();
-        let vertex_input = vk::PipelineVertexInputStateCreateInfoBuilder::new()
-            .vertex_attribute_descriptions(&vertex_desc.attributes)
-            .vertex_binding_descriptions(&vertex_desc.bindings);
-
-        //what sort of topology drawn e.g triangles or lines or whatever
-        let input_assembly = vk::PipelineInputAssemblyStateCreateInfoBuilder::new()
-            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-            .primitive_restart_enable(false);
-
-        let rasterizer = vk::PipelineRasterizationStateCreateInfoBuilder::new()
-            .depth_clamp_enable(false)
-            .rasterizer_discard_enable(false)
-            .polygon_mode(vk::PolygonMode::FILL)
-            .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::NONE)
-            .front_face(vk::FrontFace::CLOCKWISE)
-            .depth_bias_enable(false)
-            .depth_bias_constant_factor(0.0)
-            .depth_bias_clamp(0.0)
-            .depth_bias_slope_factor(0.0);
-
-        let multisampling = vk::PipelineMultisampleStateCreateInfoBuilder::new()
-            .sample_shading_enable(false)
-            .rasterization_samples(vk::SampleCountFlagBits::_1);
-
-        let color_blend_attachments = vec![vk::PipelineColorBlendAttachmentStateBuilder::new()
-            .color_write_mask(
-                vk::ColorComponentFlags::R
-                    | vk::ColorComponentFlags::G
-                    | vk::ColorComponentFlags::B
-                    | vk::ColorComponentFlags::A,
-            )
-            .blend_enable(false)];
-        let color_blending = vk::PipelineColorBlendStateCreateInfoBuilder::new()
-            .logic_op_enable(false)
-            .attachments(&color_blend_attachments);
-
-        let viewports = vec![vk::ViewportBuilder::new()
-            .x(0.0)
-            .y(0.0)
-            .width(physical.surface_caps.current_extent.width as f32)
-            .height(physical.surface_caps.current_extent.height as f32)
-            .min_depth(0.0)
-            .max_depth(1.0)];
-        let scissors = vec![vk::Rect2DBuilder::new()
-            .offset(vk::Offset2D { x: 0, y: 0 })
-            .extent(physical.surface_caps.current_extent)];
-        let viewport_state = vk::PipelineViewportStateCreateInfoBuilder::new()
-            .viewports(&viewports)
-            .scissors(&scissors);
-
-        let pipeline_depth_stencil_info = vk::PipelineDepthStencilStateCreateInfoBuilder::new()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
-            .depth_bounds_test_enable(false)
-            .min_depth_bounds(0.0)
-            .max_depth_bounds(1.0)
-            .stencil_test_enable(false);
-        
-        let push_constant = [vk::PushConstantRangeBuilder::new()
-            .offset(0)
-            .size(size_of::<[f32; 16]>() as u32)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)];
-
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfoBuilder::new()
-            .push_constant_ranges(&push_constant);
-        let pipeline_layout =
-            unsafe { physical.device.create_pipeline_layout(&pipeline_layout_info, None, None) }.unwrap();
-
-        let pipeline_infos = vec![
-            vk::GraphicsPipelineCreateInfoBuilder::new()
-                //Colored Triangle
-                .stages(&shader_stages)
-                .vertex_input_state(&vertex_input)
-                .input_assembly_state(&input_assembly)
-                .viewport_state(&viewport_state)
-                .rasterization_state(&rasterizer)
-                .multisample_state(&multisampling)
-                .color_blend_state(&color_blending)
-                .layout(pipeline_layout)
-                .render_pass(render_pass.render_pass)
-                .depth_stencil_state(&pipeline_depth_stencil_info)
-                .subpass(0),
-        ];
-
-        let pipelines =
-            unsafe { physical.device.create_graphics_pipelines(None, &pipeline_infos, None) }.unwrap();
-
-        //delete shader modules now.
-        unsafe { 
-            physical.device.destroy_shader_module(Some(frag_module),None);
-            physical.device.destroy_shader_module(Some(tri_mesh),None);
-        }
-
-        
        let triangle_data = mesh::test(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"));
         let data: &[u8] = bytemuck::cast_slice(&triangle_data);
         let size = size_of_val(data);
@@ -276,11 +149,11 @@ impl VulkanApp {
         VulkanApp {
             mesh,
             surface_caps: physical.surface_caps,
-            pipelines,
-            pipeline_layout,
-            present_semaphore,
-            render_semaphore,
-            render_fence,
+            pipelines: pipeline.pipelines,
+            pipeline_layout: pipeline.pipeline_layout,
+            present_semaphore: sync.semaphores[0],
+            render_semaphore: sync.semaphores[1],
+            render_fence: sync.fences,
             render_pass: render_pass.render_pass,
             framebuffers: render_pass.framebuffers,
             command_pool: command.pool ,
@@ -383,7 +256,7 @@ impl VulkanApp {
             self.device.cmd_bind_vertex_buffers(self.command_buffer[0], 0, &[self.mesh.vertex_buffer.buffer], &[offset]);
         };  
         //compute push constant
-        let eye    = na::Point3::<f32>::new(0.0, -1.0, 1.0);
+        let eye    = na::Point3::<f32>::new(0.0, 0.0, 200.0);
         let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
         let view   = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
         let model      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
