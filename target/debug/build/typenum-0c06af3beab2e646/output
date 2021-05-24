@@ -1,0 +1,2 @@
+cargo:rustc-env=TYPENUM_BUILD_CONSTS=D:\rustprogramming\vulkan-guide\vkguide-erupt\target\debug\build\typenum-0c06af3beab2e646\out\consts.rs
+cargo:rustc-env=TYPENUM_BUILD_OP=D:\rustprogramming\vulkan-guide\vkguide-erupt\target\debug\build\typenum-0c06af3beab2e646\out\op.rs

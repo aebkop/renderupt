@@ -1,0 +1,4 @@
+cargo:warning=shaderc: searching native shaderc libraries in Vulkan SDK 'C:\VulkanSDK\1.2.176.1/lib'
+cargo:warning=shaderc: Windows MSVC static build is experimental
+cargo:rustc-link-search=native=\\?\C:\VulkanSDK\1.2.176.1\Lib
+cargo:rustc-link-lib=static=shaderc_combined
