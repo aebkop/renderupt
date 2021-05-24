@@ -85,14 +85,9 @@ impl VulkanApp {
 
         let mut physical = Physical::new(&window);
         
-        //create a swapchain
-        let surface_caps = unsafe {
-            physical.instance.get_physical_device_surface_capabilities_khr(physical.physical_device, physical.surface, None)
-        }
-        .unwrap();
-        let mut image_count = surface_caps.min_image_count + 1;
-        if surface_caps.max_image_count > 0 && image_count > surface_caps.max_image_count {
-            image_count = surface_caps.max_image_count;
+        let mut image_count = physical.surface_caps.min_image_count + 1;
+        if physical.surface_caps.max_image_count > 0 && image_count > physical.surface_caps.max_image_count {
+            image_count = physical.surface_caps.max_image_count;
         }
 
         let swapchain_info = vk::SwapchainCreateInfoKHRBuilder::new()
@@ -100,11 +95,11 @@ impl VulkanApp {
             .min_image_count(image_count)
             .image_format(physical.format.format)
             .image_color_space(physical.format.color_space)
-            .image_extent(surface_caps.current_extent)
+            .image_extent(physical.surface_caps.current_extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .pre_transform(surface_caps.current_transform)
+            .pre_transform(physical.surface_caps.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagBitsKHR::OPAQUE_KHR)
             .present_mode(vk::PresentModeKHR::FIFO_RELAXED_KHR)
             .clipped(true)
@@ -141,8 +136,8 @@ impl VulkanApp {
             })
             .collect();
         let extent_3d = vk::Extent3DBuilder::new()
-            .width(surface_caps.current_extent.width)
-            .height(surface_caps.current_extent.height)
+            .width(physical.surface_caps.current_extent.width)
+            .height(physical.surface_caps.current_extent.height)
             .depth(1);
         
         //create depth images
@@ -245,8 +240,8 @@ impl VulkanApp {
                 let framebuffer_info = vk::FramebufferCreateInfoBuilder::new()
                     .render_pass(render_pass)
                     .attachments(&attachments)
-                    .width(surface_caps.current_extent.width)
-                    .height(surface_caps.current_extent.height)
+                    .width(physical.surface_caps.current_extent.width)
+                    .height(physical.surface_caps.current_extent.height)
                     .layers(1);
 
                 unsafe { physical.device.create_framebuffer(&framebuffer_info, None, None) }.unwrap()
@@ -329,13 +324,13 @@ impl VulkanApp {
         let viewports = vec![vk::ViewportBuilder::new()
             .x(0.0)
             .y(0.0)
-            .width(surface_caps.current_extent.width as f32)
-            .height(surface_caps.current_extent.height as f32)
+            .width(physical.surface_caps.current_extent.width as f32)
+            .height(physical.surface_caps.current_extent.height as f32)
             .min_depth(0.0)
             .max_depth(1.0)];
         let scissors = vec![vk::Rect2DBuilder::new()
             .offset(vk::Offset2D { x: 0, y: 0 })
-            .extent(surface_caps.current_extent)];
+            .extent(physical.surface_caps.current_extent)];
         let viewport_state = vk::PipelineViewportStateCreateInfoBuilder::new()
             .viewports(&viewports)
             .scissors(&scissors);
@@ -495,7 +490,7 @@ impl VulkanApp {
             
         VulkanApp {
             mesh,
-            surface_caps,
+            surface_caps: physical.surface_caps,
             pipelines,
             pipeline_layout,
             present_semaphore,

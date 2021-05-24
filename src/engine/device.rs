@@ -24,6 +24,7 @@ unsafe extern "system" fn debug_callback(
 }
 
 pub struct Physical {
+    pub surface_caps: vk::SurfaceCapabilitiesKHR,
     pub allocator: GpuAllocator<DeviceMemory>,
     pub format: vk::SurfaceFormatKHR,
     pub graphics_queue: vk::Queue,
@@ -221,8 +222,16 @@ impl Physical {
         let config = Config::i_am_potato();
 
         let mut gpu_alloc = GpuAllocator::new(config, device_properties_alloc);
+
+        //create a swapchain
+        let surface_caps = unsafe {
+                instance.get_physical_device_surface_capabilities_khr(physical_device, surface, None)
+            }
+                .unwrap();
+        
         
         Physical {
+            surface_caps,
             allocator: gpu_alloc,
             format,
             physical_device,
