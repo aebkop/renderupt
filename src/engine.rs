@@ -1,5 +1,6 @@
 mod mesh;
 mod device;
+mod swapchain;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -22,7 +23,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::engine::{device::Physical, mesh::{Vertex, Verticies}};
+use crate::engine::{device::Physical, mesh::{Vertex, Verticies}, swapchain::Swapchain};
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
@@ -84,57 +85,9 @@ impl VulkanApp {
         //vulkan initalization
 
         let mut physical = Physical::new(&window);
+
+        let swapchain = Swapchain::new(&physical);
         
-        let mut image_count = physical.surface_caps.min_image_count + 1;
-        if physical.surface_caps.max_image_count > 0 && image_count > physical.surface_caps.max_image_count {
-            image_count = physical.surface_caps.max_image_count;
-        }
-
-        let swapchain_info = vk::SwapchainCreateInfoKHRBuilder::new()
-            .surface(physical.surface)
-            .min_image_count(image_count)
-            .image_format(physical.format.format)
-            .image_color_space(physical.format.color_space)
-            .image_extent(physical.surface_caps.current_extent)
-            .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-            .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .pre_transform(physical.surface_caps.current_transform)
-            .composite_alpha(vk::CompositeAlphaFlagBitsKHR::OPAQUE_KHR)
-            .present_mode(vk::PresentModeKHR::FIFO_RELAXED_KHR)
-            .clipped(true)
-            .old_swapchain(vk::SwapchainKHR::null());
-
-        let swapchain =
-            unsafe { physical.device.create_swapchain_khr(&swapchain_info, None, None) }.unwrap();
-        let swapchain_images = unsafe { physical.device.get_swapchain_images_khr(swapchain, None) }.unwrap();
-
-        // https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Image_views
-        let swapchain_image_views: Vec<_> = swapchain_images
-            .iter()
-            .map(|swapchain_image| {
-                let image_view_info = vk::ImageViewCreateInfoBuilder::new()
-                    .image(*swapchain_image)
-                    .view_type(vk::ImageViewType::_2D)
-                    .format(physical.format.format)
-                    .components(vk::ComponentMapping {
-                        r: vk::ComponentSwizzle::IDENTITY,
-                        g: vk::ComponentSwizzle::IDENTITY,
-                        b: vk::ComponentSwizzle::IDENTITY,
-                        a: vk::ComponentSwizzle::IDENTITY,
-                    })
-                    .subresource_range(
-                        vk::ImageSubresourceRangeBuilder::new()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    );
-                unsafe { physical.device.create_image_view(&image_view_info, None, None) }.unwrap()
-            })
-            .collect();
         let extent_3d = vk::Extent3DBuilder::new()
             .width(physical.surface_caps.current_extent.width)
             .height(physical.surface_caps.current_extent.height)
@@ -233,7 +186,7 @@ impl VulkanApp {
             unsafe { physical.device.create_render_pass2(&render_pass_info, None, None) }.unwrap();
 
         //TODO Clean this up
-        let framebuffers: Vec<_> = swapchain_image_views
+        let framebuffers: Vec<_> = swapchain.image_views
             .iter()
             .map(|image_view| {
                 let attachments = vec![*image_view, depth_image_view];
@@ -380,69 +333,6 @@ impl VulkanApp {
         }
 
         
-/*           let triangle_data =  vec![
-            Vertex {
-                pos: [0.5,-0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [0.5,-0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [-0.5,-0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [-0.5,-0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [0.5,0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [0.5,0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [-0.5,0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            },
-            Vertex {
-                pos: [-0.5,0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            }
-        ];
- */
-
-/*         let triangle_data =  vec![
-            mesh::Vertex {
-                pos: Vector3::new(1.0, 1.0, 0.0),
-                color: Vector3::new(0.0,1.0,0.0),
-                normal: Vector3::new(0.0,0.0,0.0)
-            
-            },
-            mesh::Vertex {
-                pos: Vector3::new(-1.0, 1.0, 0.0),
-                color: Vector3::new(0.0,1.0,0.0),
-                normal: Vector3::new(0.0,0.0,0.0)
-            }, 
-            mesh::Vertex {
-                pos: Vector3::new(0.0, -1.0, 0.0),
-                color: Vector3::new(0.0,1.0,0.0),
-                normal: Vector3::new(0.0,0.0,0.0)
-            },
-        ];
- */    
        let triangle_data = mesh::test(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"));
         let data: &[u8] = bytemuck::cast_slice(&triangle_data);
         let size = size_of_val(data);
@@ -510,9 +400,9 @@ impl VulkanApp {
             chosen_gpu: physical.physical_device,
             allocator: physical.allocator,
             device: physical.device,
-            _swapchain: swapchain,
-            _swapchain_images: swapchain_images,
-            _swapchain_image_views: swapchain_image_views,
+            _swapchain: swapchain.swapchain,
+            _swapchain_images: swapchain.images,
+            _swapchain_image_views: swapchain.image_views,
             _isinit: true,
         }
     }
