@@ -1,4 +1,5 @@
 mod mesh;
+mod device;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -21,7 +22,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::engine::mesh::{Vertex, Verticies};
+use crate::engine::{device::Physical, mesh::{Vertex, Verticies}};
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
@@ -81,194 +82,12 @@ impl VulkanApp {
             .build(&event_loop)
             .unwrap();
         //vulkan initalization
-        let entry = EntryLoader::new().unwrap();
 
-        let application_name = CString::new("Hello Triangle").unwrap();
-        let app_info = Box::new(
-            vk::ApplicationInfoBuilder::new()
-                .api_version(vk::make_version(1, 2, 0))
-                .application_name(&application_name)
-                .engine_version(vk::make_version(1, 1, 0))
-        );
-
-        //set up required extension + swapchain + validation
-
-        let mut instance_extensions = surface::enumerate_required_extensions(&window).unwrap();
-        if VALIDATION_LAYERS_WANTED {
-            instance_extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-
-        let mut instance_layers = Vec::new();
-        if VALIDATION_LAYERS_WANTED {
-            instance_layers.push(LAYER_KHRONOS_VALIDATION);
-        }
-
-        // swapchian extension wanted as well
-        let device_extensions = vec![vk::KHR_SWAPCHAIN_EXTENSION_NAME, vk::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME];
-
-        let mut device_layers = Vec::new();
-        if VALIDATION_LAYERS_WANTED {
-            device_layers.push(LAYER_KHRONOS_VALIDATION);
-        }
-
-        let instance_info = vk::InstanceCreateInfoBuilder::new()
-            .application_info(&app_info)
-            .enabled_extension_names(&instance_extensions)
-            .enabled_layer_names(&instance_layers);
-
-        let instance =  InstanceLoader::new(&entry, &instance_info, None).unwrap();
-
-        let messenger = if VALIDATION_LAYERS_WANTED {
-            let messenger_info = vk::DebugUtilsMessengerCreateInfoEXTBuilder::new()
-                .message_severity(
-                    vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE_EXT
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING_EXT
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR_EXT,
-                )
-                .message_type(
-                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL_EXT
-                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION_EXT
-                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE_EXT,
-                )
-                .pfn_user_callback(Some(debug_callback));
-
-            unsafe { instance.create_debug_utils_messenger_ext(&messenger_info, None, None) }
-                .unwrap()
-        } else {
-            Default::default()
-        };
-
-        //create a surface to draw on
-        let surface = unsafe { surface::create_surface(&instance, &window, None) }.unwrap();
-
-        //get a device and queue
-        let (physical_device, queue_family, format, present_mode, device_properties) =
-            unsafe { instance.enumerate_physical_devices(None) }
-                .unwrap()
-                .into_iter()
-                .filter_map(|physical_device| unsafe {
-                    let queue_family = match instance
-                        .get_physical_device_queue_family_properties(physical_device, None)
-                        .into_iter()
-                        .enumerate()
-                        .position(|(i, queue_family_properties)| {
-                            queue_family_properties
-                                .queue_flags
-                                .contains(vk::QueueFlags::GRAPHICS)
-                                && instance
-                                    .get_physical_device_surface_support_khr(
-                                        physical_device,
-                                        i as u32,
-                                        surface,
-                                        None,
-                                    )
-                                    .unwrap()
-                        }) {
-                        Some(queue_family) => queue_family as u32,
-                        None => return None,
-                    };
-
-                    let formats = instance
-                        .get_physical_device_surface_formats_khr(physical_device, surface, None)
-                        .unwrap();
-                    let format = match formats
-                        .iter()
-                        .find(|surface_format| {
-                            surface_format.format == vk::Format::B8G8R8A8_SRGB
-                                && surface_format.color_space
-                                    == vk::ColorSpaceKHR::SRGB_NONLINEAR_KHR
-                        })
-                        .or_else(|| formats.get(0))
-                    {
-                        Some(surface_format) => *surface_format,
-                        None => return None,
-                    };
-
-                    let present_mode = instance
-                        .get_physical_device_surface_present_modes_khr(
-                            physical_device,
-                            surface,
-                            None,
-                        )
-                        .unwrap()
-                        .into_iter()
-                        .find(|present_mode| present_mode == &vk::PresentModeKHR::MAILBOX_KHR)
-                        .unwrap_or(vk::PresentModeKHR::FIFO_KHR);
-
-                    let supported_device_extensions = instance
-                        .enumerate_device_extension_properties(physical_device, None, None)
-                        .unwrap();
-                    let device_extensions_supported =
-                        device_extensions.iter().all(|device_extension| {
-                            let device_extension = CStr::from_ptr(*device_extension);
-
-                            supported_device_extensions.iter().any(|properties| {
-                                CStr::from_ptr(properties.extension_name.as_ptr())
-                                    == device_extension
-                            })
-                        }); 
-
-                    if !device_extensions_supported {
-                        return None;
-                    }
-
-                    let device_properties =
-                        instance.get_physical_device_properties(physical_device, None);
-                    Some((
-                        physical_device,
-                        queue_family,
-                        format,
-                        present_mode,
-                        device_properties,
-                    ))
-                })
-                .max_by_key(|(_, _, _, _, properties)| match properties.device_type {
-                    vk::PhysicalDeviceType::DISCRETE_GPU => 2,
-                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
-                    _ => 0,
-                })
-                .expect("No suitable physical device found");
-
-        println!("Using physical device: {:?}", unsafe {
-            CStr::from_ptr(device_properties.device_name.as_ptr())
-        });
-
-        let queue_info = vec![vk::DeviceQueueCreateInfoBuilder::new()
-            .queue_family_index(queue_family)
-            .queue_priorities(&[1.0])];
-        let mut features = vk::PhysicalDeviceFeaturesBuilder::new();
-            
+        let mut physical = Physical::new(&window);
         
-        let mut test2 = vk::PhysicalDeviceVulkan12FeaturesBuilder::new()
-            .buffer_device_address(true);
-                   
-        let mut device_features2_builder =
-            vk::PhysicalDeviceFeatures2Builder::new().extend_from(&mut test2);
-
-
-        //set features and extensions enabled in the device
-        let device_info = vk::DeviceCreateInfoBuilder::new()
-            .queue_create_infos(&queue_info)
-            .enabled_extension_names(&device_extensions)
-            .enabled_layer_names(&device_layers)
-            .extend_from(&mut device_features2_builder);
-            
-        let device_properties_alloc = unsafe { device_properties_alloc(&instance, physical_device)}.unwrap();
-        
-        //finally have a device and queue
-        let device =
-            DeviceLoader::new(&instance, physical_device, &device_info, None).unwrap();
-        let queue = unsafe { device.get_device_queue(queue_family, 0, None) };
-
-    
-        let config = Config::i_am_potato();
-
-        let mut gpu_alloc = GpuAllocator::new(config, device_properties_alloc);
-
-
         //create a swapchain
         let surface_caps = unsafe {
-            instance.get_physical_device_surface_capabilities_khr(physical_device, surface, None)
+            physical.instance.get_physical_device_surface_capabilities_khr(physical.physical_device, physical.surface, None)
         }
         .unwrap();
         let mut image_count = surface_caps.min_image_count + 1;
@@ -277,10 +96,10 @@ impl VulkanApp {
         }
 
         let swapchain_info = vk::SwapchainCreateInfoKHRBuilder::new()
-            .surface(surface)
+            .surface(physical.surface)
             .min_image_count(image_count)
-            .image_format(format.format)
-            .image_color_space(format.color_space)
+            .image_format(physical.format.format)
+            .image_color_space(physical.format.color_space)
             .image_extent(surface_caps.current_extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
@@ -292,8 +111,8 @@ impl VulkanApp {
             .old_swapchain(vk::SwapchainKHR::null());
 
         let swapchain =
-            unsafe { device.create_swapchain_khr(&swapchain_info, None, None) }.unwrap();
-        let swapchain_images = unsafe { device.get_swapchain_images_khr(swapchain, None) }.unwrap();
+            unsafe { physical.device.create_swapchain_khr(&swapchain_info, None, None) }.unwrap();
+        let swapchain_images = unsafe { physical.device.get_swapchain_images_khr(swapchain, None) }.unwrap();
 
         // https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Image_views
         let swapchain_image_views: Vec<_> = swapchain_images
@@ -302,7 +121,7 @@ impl VulkanApp {
                 let image_view_info = vk::ImageViewCreateInfoBuilder::new()
                     .image(*swapchain_image)
                     .view_type(vk::ImageViewType::_2D)
-                    .format(format.format)
+                    .format(physical.format.format)
                     .components(vk::ComponentMapping {
                         r: vk::ComponentSwizzle::IDENTITY,
                         g: vk::ComponentSwizzle::IDENTITY,
@@ -318,7 +137,7 @@ impl VulkanApp {
                             .layer_count(1)
                             .build(),
                     );
-                unsafe { device.create_image_view(&image_view_info, None, None) }.unwrap()
+                unsafe { physical.device.create_image_view(&image_view_info, None, None) }.unwrap()
             })
             .collect();
         let extent_3d = vk::Extent3DBuilder::new()
@@ -337,18 +156,18 @@ impl VulkanApp {
             .tiling(vk::ImageTiling::OPTIMAL)
             .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT);
         
-         let image = unsafe { device.create_image(&image_create_info, None, None).unwrap() }; 
-        let mem_requirements = unsafe { device.get_image_memory_requirements(image, None) }; 
+         let image = unsafe { physical.device.create_image(&image_create_info, None, None).unwrap() }; 
+        let mem_requirements = unsafe { physical.device.get_image_memory_requirements(image, None) }; 
         let alloc_request = gpu_alloc::Request {
             size: mem_requirements.size,
             align_mask: mem_requirements.alignment,
             usage: gpu_alloc::UsageFlags::FAST_DEVICE_ACCESS,
             memory_types: mem_requirements.memory_type_bits,
         };
-        let mut block = unsafe { gpu_alloc.alloc(EruptMemoryDevice::wrap(&device), alloc_request) }.unwrap();
+        let mut block = unsafe { physical.allocator.alloc(EruptMemoryDevice::wrap(&physical.device), alloc_request) }.unwrap();
 
         unsafe {
-            device.bind_image_memory(image,*block.memory(),0).unwrap();
+            physical.device.bind_image_memory(image,*block.memory(),0).unwrap();
         }
         
         let image_view_create_info = vk::ImageViewCreateInfoBuilder::new()
@@ -357,13 +176,13 @@ impl VulkanApp {
             .format(vk::Format::D32_SFLOAT)
             .subresource_range(*vk::ImageSubresourceRangeBuilder::new().base_mip_level(0).level_count(1).base_array_layer(0).layer_count(1).aspect_mask(vk::ImageAspectFlags::DEPTH));
 
-        let depth_image_view = unsafe { device.create_image_view(&image_view_create_info, None, None)}.unwrap();
+        let depth_image_view = unsafe { physical.device.create_image_view(&image_view_create_info, None, None)}.unwrap();
         
         
         let mut command_pool_info =
-            vk::CommandPoolCreateInfoBuilder::new().queue_family_index(queue_family).flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+            vk::CommandPoolCreateInfoBuilder::new().queue_family_index(physical.graphics_queue_family).flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
         let command_pool =
-            unsafe { device.create_command_pool(&command_pool_info, None, None) }.unwrap();
+            unsafe { physical.device.create_command_pool(&command_pool_info, None, None) }.unwrap();
 
         let command_buffer_info = vk::CommandBufferAllocateInfoBuilder::new()
             .command_pool(command_pool)
@@ -371,10 +190,10 @@ impl VulkanApp {
             .level(vk::CommandBufferLevel::PRIMARY);
 
         let command_buffer =
-            unsafe { device.allocate_command_buffers(&command_buffer_info) }.unwrap();
+            unsafe { physical.device.allocate_command_buffers(&command_buffer_info) }.unwrap();
 
         let color_attachment = AttachmentDescription2Builder::new()
-            .format(format.format)
+            .format(physical.format.format)
             .samples(vk::SampleCountFlagBits::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
@@ -416,7 +235,7 @@ impl VulkanApp {
             .subpasses(&subpasses);            
 
         let render_pass =
-            unsafe { device.create_render_pass2(&render_pass_info, None, None) }.unwrap();
+            unsafe { physical.device.create_render_pass2(&render_pass_info, None, None) }.unwrap();
 
         //TODO Clean this up
         let framebuffers: Vec<_> = swapchain_image_views
@@ -430,7 +249,7 @@ impl VulkanApp {
                     .height(surface_caps.current_extent.height)
                     .layers(1);
 
-                unsafe { device.create_framebuffer(&framebuffer_info, None, None) }.unwrap()
+                unsafe { physical.device.create_framebuffer(&framebuffer_info, None, None) }.unwrap()
             })
             .collect();
 
@@ -441,21 +260,21 @@ impl VulkanApp {
         let mut semaphore_create_info = vk::SemaphoreCreateInfoBuilder::new();
 
         let render_semaphore =
-            unsafe { device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
+            unsafe { physical.device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
         let present_semaphore =
-            unsafe { device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
+            unsafe {  physical.device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
 
         let mut render_fence: Vec<vk::Fence> = Vec::new();
-        render_fence.push(unsafe { device.create_fence(&fence_info, None, None) }.unwrap());
+        render_fence.push(unsafe {  physical.device.create_fence(&fence_info, None, None) }.unwrap());
 
         //Pipeline starts here
         //Shader Modules
         let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(FRAG);
-        let frag_module = unsafe { device.create_shader_module(&module_info, None, None) }.unwrap();
+        let frag_module = unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
         let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(TRIMESH);
         let entry_point = CString::new("main").unwrap();
         let tri_mesh =
-            unsafe { device.create_shader_module(&module_info, None, None) }.unwrap();
+            unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
 
     
         let shader_stages = vec![
@@ -538,7 +357,7 @@ impl VulkanApp {
         let pipeline_layout_info = vk::PipelineLayoutCreateInfoBuilder::new()
             .push_constant_ranges(&push_constant);
         let pipeline_layout =
-            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None, None) }.unwrap();
+            unsafe { physical.device.create_pipeline_layout(&pipeline_layout_info, None, None) }.unwrap();
 
         let pipeline_infos = vec![
             vk::GraphicsPipelineCreateInfoBuilder::new()
@@ -557,12 +376,12 @@ impl VulkanApp {
         ];
 
         let pipelines =
-            unsafe { device.create_graphics_pipelines(None, &pipeline_infos, None) }.unwrap();
+            unsafe { physical.device.create_graphics_pipelines(None, &pipeline_infos, None) }.unwrap();
 
         //delete shader modules now.
         unsafe { 
-            device.destroy_shader_module(Some(frag_module),None);
-            device.destroy_shader_module(Some(tri_mesh),None);
+            physical.device.destroy_shader_module(Some(frag_module),None);
+            physical.device.destroy_shader_module(Some(tri_mesh),None);
         }
 
         
@@ -639,8 +458,8 @@ impl VulkanApp {
             .usage(vk::BufferUsageFlags::VERTEX_BUFFER);
 
         let mut block = unsafe {
-             gpu_alloc.alloc(
-                    EruptMemoryDevice::wrap(&device),
+            physical.allocator.alloc(
+                    EruptMemoryDevice::wrap(&physical.device),
                     Request {
                         size: size as u64,
                         align_mask: 1,
@@ -651,13 +470,13 @@ impl VulkanApp {
             }.unwrap();
                     
         unsafe {
-            block.write_bytes(EruptMemoryDevice::wrap(&device), 0, data).unwrap();
+            block.write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data).unwrap();
         }
         
-        let buffer = unsafe { device.create_buffer(&buffer_info, None, None) }.unwrap();
+        let buffer = unsafe { physical.device.create_buffer(&buffer_info, None, None) }.unwrap();
 
         unsafe {
-            device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
+            physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
         }
 
         let allocated_buff = mesh::allocated_buffer {
@@ -686,16 +505,16 @@ impl VulkanApp {
             framebuffers,
             command_pool,
             command_buffer: command_buffer,
-            graphics_queue: queue,
-            graphics_queue_family: queue_family,
+            graphics_queue: physical.graphics_queue,
+            graphics_queue_family: physical.graphics_queue_family,
             window,
-            messenger,
-            _entry: entry,
-            instance,
-            surface,
-            chosen_gpu: physical_device,
-            allocator: gpu_alloc,
-            device,
+            messenger: physical.messenger,
+            _entry: physical.entry,
+            instance: physical.instance,
+            surface: physical.surface,
+            chosen_gpu: physical.physical_device,
+            allocator: physical.allocator,
+            device: physical.device,
             _swapchain: swapchain,
             _swapchain_images: swapchain_images,
             _swapchain_image_views: swapchain_image_views,
