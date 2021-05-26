@@ -5,6 +5,7 @@ mod renderpass;
 mod commands;
 mod sync;
 mod pipeline;
+mod scene;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -27,9 +28,9 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::engine::{commands::Command, device::Physical, mesh::{Vertex, Verticies}, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
+use crate::engine::{commands::Command, device::Physical, mesh::{Vertex}, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
 
-use self::pipeline::PipelineStruct;
+use self::{mesh::Mesh, pipeline::PipelineStruct};
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
@@ -100,50 +101,7 @@ impl VulkanApp {
 
         let pipeline = PipelineStruct::new(&physical, &render_pass);
         
-    
-       let triangle_data = mesh::test(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"));
-        let data: &[u8] = bytemuck::cast_slice(&triangle_data);
-        let size = size_of_val(data);
-        
-
-        let buffer_info = vk::BufferCreateInfoBuilder::new()
-            .size(size as u64)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER);
-
-        let mut block = unsafe {
-            physical.allocator.alloc(
-                    EruptMemoryDevice::wrap(&physical.device),
-                    Request {
-                        size: size as u64,
-                        align_mask: 1,
-                        usage: UsageFlags::HOST_ACCESS,
-                        memory_types: !0,
-                    },
-                )
-            }.unwrap();
-                    
-        unsafe {
-            block.write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data).unwrap();
-        }
-        
-        let buffer = unsafe { physical.device.create_buffer(&buffer_info, None, None) }.unwrap();
-
-        unsafe {
-            physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
-        }
-
-        let allocated_buff = mesh::allocated_buffer {
-            buffer,
-            allocation: block
-        };
-
-        let mesh = mesh::Mesh {
-            verticies:  triangle_data,
-            vertex_buffer: (
-                allocated_buff
-            ),
-
-        };
+        let mesh = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"), &mut physical);
 
             
         VulkanApp {
