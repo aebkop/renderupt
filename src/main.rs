@@ -2,9 +2,9 @@ use winit::event_loop::EventLoop;
 
 
 mod engine;
+mod window;
 fn main() {
+    let window = window::start();
     
-    let event_loop = EventLoop::new();
-    let a = engine::VulkanApp::new(&event_loop);
-    a.run(event_loop)
+    
 }

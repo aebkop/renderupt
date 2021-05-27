@@ -12,7 +12,7 @@ pub struct RenderPass {
 
 impl RenderPass {
     pub fn new(physical: &mut Physical, swapchain: &Swapchain) -> Self {
-        let extent_3d = vk::Extent3DBuilder::new()
+    let extent_3d = vk::Extent3DBuilder::new()
         .width(physical.surface_caps.current_extent.width)
         .height(physical.surface_caps.current_extent.height)
         .depth(1);

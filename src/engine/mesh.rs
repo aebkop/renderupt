@@ -13,7 +13,7 @@ use memoffset::offset_of;
 use serde::Serialize;
 
 use super::device::Physical;
-
+#[derive(Debug)]
 pub struct allocated_buffer {
     pub buffer: vk::Buffer,
     pub allocation: MemoryBlock<DeviceMemory>,
@@ -30,6 +30,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
     pub color: [f32; 3],
 }
+#[derive(Debug)]
 #[repr(C)]
 pub struct Mesh {
     pub verticies: Vec<Vertex>,
@@ -124,7 +125,43 @@ pub fn load(path: &std::path::Path) -> Vec<Vertex> {
 
 impl Mesh {
     pub fn new(path: &std::path::Path, physical: &mut Physical) -> Self {
-        let triangle_data = load(path);
+   //     let triangle_data = load(path); 
+   let mut triangle_data: Vec<Vertex> = vec![];
+
+   let (models, materials) = tobj::load_obj(
+       path,
+       &tobj::LoadOptions {
+           triangulate: true,
+           single_index: true,
+           ..Default::default()
+       },
+   )
+   .expect("Failed to OBJ load file");
+
+   let mesh = &models[0].mesh;
+
+   for idx in &mesh.indices {
+       let i = *idx as usize;
+       let pos = [
+           mesh.positions[3 * i],
+           mesh.positions[3 * i + 1],
+           mesh.positions[3 * i + 2],
+       ];
+       let normal = if !mesh.normals.is_empty() {
+           [
+               mesh.normals[3 * i],
+               mesh.normals[3 * i + 1],
+               mesh.normals[3 * i + 2],
+           ]
+       } else {
+           [0.0, 0.0, 0.0]
+       };
+       let color = normal.clone();
+
+       triangle_data.push(Vertex { pos, normal, color })
+   }
+
+        println!("path {:?}, len {}", path, triangle_data.len());
         let data: &[u8] = bytemuck::cast_slice(&triangle_data);
         let size = size_of_val(data);
         

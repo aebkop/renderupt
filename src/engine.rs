@@ -30,7 +30,7 @@ use winit::{
 
 use crate::engine::{commands::Command, device::Physical, mesh::{Vertex}, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
 
-use self::{mesh::Mesh, pipeline::PipelineStruct};
+use self::{mesh::Mesh, pipeline::PipelineStruct, scene::Scene};
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
@@ -52,10 +52,8 @@ unsafe extern "system" fn debug_callback(
 
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
-    mesh: mesh::Mesh,
+    scene: Scene,
     surface_caps: vk::SurfaceCapabilitiesKHR,
-    pipelines: Vec<vk::Pipeline>,
-    pipeline_layout: vk::PipelineLayout,
     present_semaphore: vk::Semaphore,
     render_semaphore: vk::Semaphore,
     render_fence: Vec<vk::Fence>,
@@ -100,15 +98,110 @@ impl VulkanApp {
         let sync = SyncStructs::new(&physical);
 
         let pipeline = PipelineStruct::new(&physical, &render_pass);
+
+        let mut scene = Scene::new();
+        let mesh = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/monkey_smooth.obj"), &mut physical);
+        let axisangle = Vector3::y() * std::f32::consts::FRAC_PI_2;
+        let mesh_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::x(), axisangle);
+        scene.add_render_object_with_mesh_material(mesh, "teapot", scene::Material{pipeline}, "default", mesh_matrix);
+
+        let triangle_data =  vec![
+            Vertex {
+                pos: [0.5,-0.5,-0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [0.5,-0.5,0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [-0.5,-0.5,0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [-0.5,-0.5,-0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [0.5,0.5,-0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [0.5,0.5,0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [-0.5,0.5,0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            },
+            Vertex {
+                pos: [-0.5,0.5,-0.5],
+                color: [0.0,1.0,0.0],
+                normal: [0.0,0.0,0.0]
+            }
+        ];
+        let data: &[u8] = bytemuck::cast_slice(&triangle_data);
+        let size = size_of_val(data);
+
+        let buffer_info = vk::BufferCreateInfoBuilder::new()
+            .size(size as u64)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER);
+
+        let mut block = unsafe {
+             physical.allocator.alloc(
+                    EruptMemoryDevice::wrap(&physical.device),
+                    Request {
+                        size: size as u64,
+                        align_mask: 1,
+                        usage: UsageFlags::HOST_ACCESS,
+                        memory_types: !0,
+                    },
+                )
+            }.unwrap();
+                    
+        unsafe {
+            block.write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data).unwrap();
+        }
         
-        let mesh = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"), &mut physical);
+        let buffer = unsafe { physical.device.create_buffer(&buffer_info, None, None) }.unwrap();
+
+        unsafe {
+            physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
+        }
+
+        let allocated_buff = mesh::allocated_buffer {
+            buffer,
+            allocation: block
+        };
+
+        let triangle = mesh::Mesh {
+            verticies:  triangle_data,
+            vertex_buffer: (
+                allocated_buff
+            ),
+
+        };
+
+        let cube_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::new(5.0,0.0,0.0), na::zero());
+        scene.add_render_object_with_mesh(triangle, "cube", "default", cube_matrix);
+
+        
+
+
+
+
 
             
         VulkanApp {
-            mesh,
+            scene,
             surface_caps: physical.surface_caps,
-            pipelines: pipeline.pipelines,
-            pipeline_layout: pipeline.pipeline_layout,
             present_semaphore: sync.semaphores[0],
             render_semaphore: sync.semaphores[1],
             render_fence: sync.fences,
@@ -133,10 +226,38 @@ impl VulkanApp {
         }
     }
     
-    fn load_meshes(&mut self)  {
+    fn draw_objects(&mut self, framenumber: i64)  {
+                //compute push constant
+        let eye    = na::Point3::<f32>::new(0.0, 0.0, 2.0);
+        let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
+        let view   = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
+        let model      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
+        let projection = na::Perspective3::<f32>::new(self.surface_caps.current_extent.width as f32 / self.surface_caps.current_extent.height as f32, 3.14 / 2.0, 0.1, 200.0).into_inner();
+        let material = self.scene.materials.get("default").unwrap();
+        unsafe {
+            self.device.cmd_bind_pipeline(self.command_buffer[0], vk::PipelineBindPoint::GRAPHICS, material.pipeline.pipelines[0]);
+            }
+        for (a,b,c) in self.scene.objects.iter() {
+            let mesh = self.scene.meshes.get(a).unwrap();
+            let offset: u64 = 0;
+            let model_view_projection:na::Matrix4<f32> = projection * (view * c).to_homogeneous();
+
+            unsafe {
+                self.device.cmd_push_constants(self.command_buffer[0], material.pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, size_of_val(model_view_projection.as_slice()) as u32, model_view_projection.as_slice().as_ptr() as *mut c_void);
+                self.device.cmd_bind_vertex_buffers(self.command_buffer[0], 0, &[mesh.vertex_buffer.buffer], &[offset]);
+                self.device.cmd_draw(self.command_buffer[0], mesh.verticies.len() as u32, 1, 0, 0);
+            }
+
+            
+
+        }
     }
 
-    fn draw(&mut self, framenumber: i64, selected_shader: bool) {
+        
+        
+        
+
+    pub fn draw(&mut self, framenumber: i64) {
         unsafe {
             self.device
                 .wait_for_fences(&self.render_fence, false, u64::MAX)
@@ -203,29 +324,10 @@ impl VulkanApp {
                 vk::SubpassContents::INLINE,
             )
         };
-            
-        unsafe {
-            self.device.cmd_bind_pipeline(
-                self.command_buffer[0],
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipelines[0],
-            );
-            let offset: u64 = 0;
-            self.device.cmd_bind_vertex_buffers(self.command_buffer[0], 0, &[self.mesh.vertex_buffer.buffer], &[offset]);
-        };  
-        //compute push constant
-        let eye    = na::Point3::<f32>::new(0.0, 0.0, 200.0);
-        let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
-        let view   = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
-        let model      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
-        let  projection = na::Perspective3::<f32>::new(self.surface_caps.current_extent.width as f32 / self.surface_caps.current_extent.height as f32, 3.14 / 2.0, 0.1, 200.0).into_inner();
-        let model_view_projection:na::Matrix4<f32> = projection * (view * model).to_homogeneous();
-	
-        unsafe {
-            self.device.cmd_push_constants(self.command_buffer[0], self.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, size_of_val(model_view_projection.as_slice()) as u32, model_view_projection.as_slice().as_ptr() as *mut c_void 
-    );
-            self.device.cmd_draw(self.command_buffer[0], self.mesh.verticies.len() as u32, 1, 0, 0);
 
+        self.draw_objects(framenumber);
+            	
+        unsafe {
             //end renderpass
             self.device.cmd_end_render_pass(self.command_buffer[0]);
             self.device
@@ -262,43 +364,6 @@ impl VulkanApp {
         .unwrap();
     }
 
-    pub fn run(mut self, event_loop: EventLoop<()>) {
-        //state variables
-        let mut framenumber: i64 = 0;
-        let mut selected_shader: bool = true;
-
-
-        event_loop.run(move |event, _, control_flow| match event {
-            Event::NewEvents(StartCause::Init) => {
-                *control_flow = ControlFlow::Poll;
-            }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                _ => (),
-            },
-            Event::DeviceEvent { event, .. } => match event {
-                DeviceEvent::Key(KeyboardInput {
-                    virtual_keycode: Some(keycode),
-                    state,
-                    ..
-                }) => match (keycode, state) {
-                    (VirtualKeyCode::Escape, ElementState::Released) => {
-                        *control_flow = ControlFlow::Exit
-                    }
-                    (VirtualKeyCode::Space, ElementState::Released) => {
-                        selected_shader = !selected_shader;
-                    }
-                    _ => (),
-                },
-                _ => (),
-            },
-            Event::MainEventsCleared => {
-                self.draw(framenumber, selected_shader);
-                framenumber = framenumber + 1;
-            }
-            _ => (),
-        });
-    } 
 }
 //Instead of a cleanup function the drop trait is used which runs automatically after the value is no longer needed.
 impl Drop for VulkanApp {
@@ -322,11 +387,6 @@ impl Drop for VulkanApp {
                 self.device.destroy_framebuffer(Some(framebuffer), None);
             }
 
-            for &pipeline in self.pipelines.iter() {
-                self.device.destroy_pipeline(Some(pipeline), None);
-            }
-
-            self.device.destroy_pipeline_layout(Some(self.pipeline_layout), None);
             
             for &fence in self.render_fence.iter() {
                 self.device.destroy_fence(Some(fence), None);

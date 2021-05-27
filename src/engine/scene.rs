@@ -1,26 +1,24 @@
 use std::{collections::{HashMap, HashSet}, hash::Hash, iter::Map};
 
 use erupt::{vk::{self}};
+use nalgebra::Isometry3;
 
 use super::{mesh::Mesh, pipeline::PipelineStruct};
 
 
 pub struct Material {
-    pipeline: PipelineStruct
+    pub pipeline: PipelineStruct
 }
 
-pub struct RenderObject<'a> {
-    mesh: &'a Mesh,
-    material: &'a Material
-}
 
-pub struct Scene<'a> {
-    pub objects: Vec<RenderObject<'a>>,
+
+pub struct Scene {
+    pub objects: Vec<(String, String, nalgebra::Isometry3<f32>)>,
     pub meshes: HashMap<String, Mesh>,
     pub materials: HashMap<String, Material>
 } 
 
-impl<'a> Scene<'a> {
+impl Scene{
     pub fn new() -> Self {
         Scene {
             objects: Vec::new(),
@@ -30,17 +28,23 @@ impl<'a> Scene<'a> {
     }
 
 
-    pub fn add_render_object(&'a mut self, mesh: Mesh, mesh_name: &String, material: Material, material_name: &String) {
+    pub fn add_render_object_with_mesh_material(&mut self, mesh: Mesh, mesh_name: &str, material: Material, material_name: &str, translation_matrix: Isometry3<f32>) {
         self.meshes.insert(mesh_name.to_string(), mesh);
         self.materials.insert(material_name.to_string(), material);
-        let render_object = RenderObject {
-            mesh: self.meshes.get(mesh_name).unwrap(),
-            material: self.materials.get(material_name).unwrap()
-        };
-        self.objects.push(render_object);
+        self.objects.push((mesh_name.to_string(), material_name.to_string(), translation_matrix));
+    }
 
+    pub fn add_render_object_with_mesh(&mut self, mesh: Mesh, mesh_name: &str, material_name: &str, translation_matrix: Isometry3<f32>) {
+        self.meshes.insert(mesh_name.to_string(), mesh);
+        self.objects.push((mesh_name.to_string(), material_name.to_string(), translation_matrix));
     }
 
 
+    pub fn add_render_object(&mut self, mesh_name: &str, material_name: &str, translation_matrix: Isometry3<f32>) {
+        self.objects.push((mesh_name.to_string(), material_name.to_string(), translation_matrix));
+    
+    }
+
 }
+
 
