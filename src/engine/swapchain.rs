@@ -1,18 +1,19 @@
 use super::device::Physical;
 
-use erupt::{vk::{self}};
-
+use erupt::vk::{self};
 
 pub struct Swapchain {
     pub swapchain: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
-    pub image_views: Vec<vk::ImageView>
+    pub image_views: Vec<vk::ImageView>,
 }
 
 impl Swapchain {
     pub fn new(physical: &Physical) -> Self {
         let mut image_count = physical.surface_caps.min_image_count + 1;
-        if physical.surface_caps.max_image_count > 0 && image_count > physical.surface_caps.max_image_count {
+        if physical.surface_caps.max_image_count > 0
+            && image_count > physical.surface_caps.max_image_count
+        {
             image_count = physical.surface_caps.max_image_count;
         }
 
@@ -31,9 +32,14 @@ impl Swapchain {
             .clipped(true)
             .old_swapchain(vk::SwapchainKHR::null());
 
-        let swapchain =
-            unsafe { physical.device.create_swapchain_khr(&swapchain_info, None, None) }.unwrap();
-        let swapchain_images = unsafe { physical.device.get_swapchain_images_khr(swapchain, None) }.unwrap();
+        let swapchain = unsafe {
+            physical
+                .device
+                .create_swapchain_khr(&swapchain_info, None, None)
+        }
+        .unwrap();
+        let swapchain_images =
+            unsafe { physical.device.get_swapchain_images_khr(swapchain, None) }.unwrap();
 
         // https://vulkan-tutorial.com/Drawing_a_triangle/Presentation/Image_views
         let swapchain_image_views: Vec<_> = swapchain_images
@@ -58,16 +64,27 @@ impl Swapchain {
                             .layer_count(1)
                             .build(),
                     );
-                unsafe { physical.device.create_image_view(&image_view_info, None, None) }.unwrap()
+                unsafe {
+                    physical
+                        .device
+                        .create_image_view(&image_view_info, None, None)
+                }
+                .unwrap()
             })
             .collect();
 
-            Swapchain {
-                swapchain,
-                images: swapchain_images,
-                image_views: swapchain_image_views
+        Swapchain {
+            swapchain,
+            images: swapchain_images,
+            image_views: swapchain_image_views,
+        }
+    }
+    pub fn cleanup(&mut self, physical: &Physical) {
+        unsafe {
+            physical.device.destroy_swapchain_khr(Some(self.swapchain), None);
+            for &image_view in self.image_views.iter() {
+                physical.device.destroy_image_view(Some(image_view), None);
             }
-
-
+        }
     }
 }

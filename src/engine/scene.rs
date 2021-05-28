@@ -1,9 +1,10 @@
 use std::{collections::{HashMap, HashSet}, hash::Hash, iter::Map};
 
 use erupt::{vk::{self}};
+use gpu_alloc_erupt::EruptMemoryDevice;
 use nalgebra::Isometry3;
 
-use super::{mesh::Mesh, pipeline::PipelineStruct};
+use super::{device::Physical, mesh::Mesh, pipeline::PipelineStruct};
 
 
 pub struct Material {
@@ -45,6 +46,19 @@ impl Scene{
     
     }
 
+    pub fn cleanup(&mut self, physical: &mut Physical) {
+        unsafe { 
+        for (_, mesh) in self.meshes.iter() {
+    //        physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device),mesh.vertex_buffer.allocation);
+            physical.device.destroy_buffer(Some(mesh.vertex_buffer.buffer), None);
+        }
+        for (_, material) in self.materials.iter() {
+            physical.device.destroy_pipeline_layout(Some(material.pipeline.pipeline_layout), None);
+            for pipeline in &material.pipeline.pipelines {
+                physical.device.destroy_pipeline(Some(*pipeline), None);
+            }
+        }
+    }}
 }
 
 

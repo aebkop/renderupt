@@ -29,5 +29,9 @@ impl Command {
     }
     
     }
+    pub fn cleanup(&mut self, physical: &Physical) {
+        unsafe {
+            physical.device.destroy_command_pool(Some(self.pool), None)
+    }}
 }
 

@@ -12,7 +12,7 @@ pub fn start() {
     .build(&event_loop)
     .unwrap();
 
-    let mut a = VulkanApp::new(&event_loop);
+    let mut a = VulkanApp::new(&window);
 
     let mut framenumber = 0;
 

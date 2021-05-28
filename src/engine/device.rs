@@ -245,4 +245,15 @@ impl Physical {
             
         }
     }
+    pub fn cleanup(&mut self) {
+        unsafe { 
+        self.allocator.cleanup(EruptMemoryDevice::wrap(&self.device));
+        self.device.destroy_device(None);
+        self.instance.destroy_surface_khr(Some(self.surface), None);
+        if !self.messenger.is_null() {
+            self.instance
+                .destroy_debug_utils_messenger_ext(Some(self.messenger), None);
+        }
+        self.instance.destroy_instance(None);
+    }}
 }

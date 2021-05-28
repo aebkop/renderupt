@@ -12,7 +12,8 @@ pub struct PipelineStruct {
     pub pipelines: Vec<vk::Pipeline>,
     pub pipeline_layout: vk::PipelineLayout
 }
-
+//Cleanup for this class is done in the scene class 
+//This class is never used directly, but only via the Scene class.
 impl PipelineStruct {
     pub fn new(physical: &Physical, render_pass: &RenderPass) -> Self {
                 //Pipeline starts here

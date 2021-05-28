@@ -117,4 +117,12 @@ let framebuffers: Vec<_> = swapchain.image_views
     }
 
     }
+    pub fn cleanup(&mut self, physical: &Physical) {
+        unsafe { 
+        for framebuffer in self.framebuffers.iter() {
+            physical.device.destroy_framebuffer(Some(*framebuffer), None);
+        }
+        physical.device.destroy_render_pass(Some(self.render_pass), None)
+
+    }}
 }

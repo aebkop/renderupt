@@ -122,7 +122,6 @@ pub fn load(path: &std::path::Path) -> Vec<Vertex> {
 
     vertices
 }
-
 impl Mesh {
     pub fn new(path: &std::path::Path, physical: &mut Physical) -> Self {
    //     let triangle_data = load(path); 
@@ -205,4 +204,9 @@ impl Mesh {
         }
 
     }
+    pub fn cleanup(&mut self, physical: &mut Physical) { 
+        unsafe { 
+//      physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device), self.vertex_buffer.allocation);
+        physical.device.destroy_buffer(Some(self.vertex_buffer.buffer), None);
+    }}
 }

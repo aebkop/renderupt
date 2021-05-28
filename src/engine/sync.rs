@@ -28,4 +28,14 @@ impl SyncStructs {
         }
 
     }
+
+    pub fn cleanup(&mut self, physical: &Physical) {
+        unsafe { 
+        for semaphore in &self.semaphores {
+            physical.device.destroy_semaphore(Some(*semaphore), None);
+        }
+        for fence in &self.fences {
+            physical.device.destroy_fence(Some(*fence), None);
+        }
+    }}
 }

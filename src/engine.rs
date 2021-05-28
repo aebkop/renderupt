@@ -53,41 +53,18 @@ unsafe extern "system" fn debug_callback(
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
     scene: Scene,
-    surface_caps: vk::SurfaceCapabilitiesKHR,
-    present_semaphore: vk::Semaphore,
-    render_semaphore: vk::Semaphore,
-    render_fence: Vec<vk::Fence>,
-    render_pass: vk::RenderPass,
-    framebuffers: Vec<vk::Framebuffer>,
-    graphics_queue: vk::Queue,
-    graphics_queue_family: u32,
-    command_pool: vk::CommandPool,
-    command_buffer: Vec<vk::CommandBuffer>,
-    _swapchain_image_views: Vec<vk::ImageView>,
-    _swapchain_images: Vec<vk::Image>,
-    _swapchain: vk::SwapchainKHR,
-    allocator: GpuAllocator<DeviceMemory>,
-    device: DeviceLoader,
-    chosen_gpu: vk::PhysicalDevice,
-    instance: InstanceLoader,
-    surface: vk::SurfaceKHR,
-    _entry: EntryLoader<libloading::Library>,
-    messenger: DebugUtilsMessengerEXT,
-    window: Window,
-    _isinit: bool,
+    sync: SyncStructs,
+    command: Command,
+    render_pass: RenderPass,
+    swapchain: Swapchain,
+    physical: Physical
 }
 
 impl VulkanApp {
-    pub fn new(event_loop: &winit::event_loop::EventLoop<()>) -> Self {
-        //window/winit initalization
-        let window = WindowBuilder::new()
-            .with_title("test")
-            .with_resizable(true)
-            .build(&event_loop)
-            .unwrap();
-
+    pub fn new(window : &Window) -> Self {
+        //window/wi
         //this needs to be mut because device and the allocator gets mutated when doing commands 
-        let mut physical = Physical::new(&window);
+        let mut physical = Physical::new(window);
 
         let swapchain = Swapchain::new(&physical);
 
@@ -103,7 +80,7 @@ impl VulkanApp {
         let mesh = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/monkey_smooth.obj"), &mut physical);
         let axisangle = Vector3::y() * std::f32::consts::FRAC_PI_2;
         let mesh_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::x(), axisangle);
-        scene.add_render_object_with_mesh_material(mesh, "teapot", scene::Material{pipeline}, "default", mesh_matrix);
+        scene.add_render_object_with_mesh_material(mesh, "monkey", scene::Material{pipeline}, "default", mesh_matrix);
 
         let triangle_data =  vec![
             Vertex {
@@ -192,6 +169,10 @@ impl VulkanApp {
         let cube_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::new(5.0,0.0,0.0), na::zero());
         scene.add_render_object_with_mesh(triangle, "cube", "default", cube_matrix);
 
+        let cube = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"), &mut physical);
+        let test    : na::Isometry3<f32> = na::Isometry3::new(Vector3::new(10.0,-3.0,3.0), na::zero());
+        scene.add_render_object_with_mesh( cube, "teapot", "default", test);
+
         
 
 
@@ -201,28 +182,11 @@ impl VulkanApp {
             
         VulkanApp {
             scene,
-            surface_caps: physical.surface_caps,
-            present_semaphore: sync.semaphores[0],
-            render_semaphore: sync.semaphores[1],
-            render_fence: sync.fences,
-            render_pass: render_pass.render_pass,
-            framebuffers: render_pass.framebuffers,
-            command_pool: command.pool ,
-            command_buffer: command.buffer,
-            graphics_queue: physical.graphics_queue,
-            graphics_queue_family: physical.graphics_queue_family,
-            window,
-            messenger: physical.messenger,
-            _entry: physical.entry,
-            instance: physical.instance,
-            surface: physical.surface,
-            chosen_gpu: physical.physical_device,
-            allocator: physical.allocator,
-            device: physical.device,
-            _swapchain: swapchain.swapchain,
-            _swapchain_images: swapchain.images,
-            _swapchain_image_views: swapchain.image_views,
-            _isinit: true,
+            sync,
+            command,
+            render_pass,
+            swapchain,
+            physical,
         }
     }
     
@@ -231,21 +195,21 @@ impl VulkanApp {
         let eye    = na::Point3::<f32>::new(0.0, 0.0, 2.0);
         let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
         let view   = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
-        let model      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
-        let projection = na::Perspective3::<f32>::new(self.surface_caps.current_extent.width as f32 / self.surface_caps.current_extent.height as f32, 3.14 / 2.0, 0.1, 200.0).into_inner();
+        let camera_angle      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
+        let projection = na::Perspective3::<f32>::new(self.physical.surface_caps.current_extent.width as f32 / self.physical.surface_caps.current_extent.height as f32, 3.14 / 1.5, 0.1, 200.0).into_inner();
         let material = self.scene.materials.get("default").unwrap();
         unsafe {
-            self.device.cmd_bind_pipeline(self.command_buffer[0], vk::PipelineBindPoint::GRAPHICS, material.pipeline.pipelines[0]);
+            self.physical.device.cmd_bind_pipeline(self.command.buffer[0], vk::PipelineBindPoint::GRAPHICS, material.pipeline.pipelines[0]);
             }
         for (a,b,c) in self.scene.objects.iter() {
             let mesh = self.scene.meshes.get(a).unwrap();
             let offset: u64 = 0;
-            let model_view_projection:na::Matrix4<f32> = projection * (view * c).to_homogeneous();
+            let model_view_projection:na::Matrix4<f32> = projection * (camera_angle * view * c).to_homogeneous();
 
             unsafe {
-                self.device.cmd_push_constants(self.command_buffer[0], material.pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, size_of_val(model_view_projection.as_slice()) as u32, model_view_projection.as_slice().as_ptr() as *mut c_void);
-                self.device.cmd_bind_vertex_buffers(self.command_buffer[0], 0, &[mesh.vertex_buffer.buffer], &[offset]);
-                self.device.cmd_draw(self.command_buffer[0], mesh.verticies.len() as u32, 1, 0, 0);
+                self.physical.device.cmd_push_constants(self.command.buffer[0], material.pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, size_of_val(model_view_projection.as_slice()) as u32, model_view_projection.as_slice().as_ptr() as *mut c_void);
+                self.physical.device.cmd_bind_vertex_buffers(self.command.buffer[0], 0, &[mesh.vertex_buffer.buffer], &[offset]);
+                self.physical.device.cmd_draw(self.command.buffer[0], mesh.verticies.len() as u32, 1, 0, 0);
             }
 
             
@@ -253,23 +217,24 @@ impl VulkanApp {
         }
     }
 
-        
+    //Present semaphore - 0
+    //render - 1
         
         
 
     pub fn draw(&mut self, framenumber: i64) {
         unsafe {
-            self.device
-                .wait_for_fences(&self.render_fence, false, u64::MAX)
+            self.physical.device
+                .wait_for_fences(&self.sync.fences, false, u64::MAX)
                 .unwrap();
-            self.device.reset_fences(&self.render_fence)
+            self.physical.device.reset_fences(&self.sync.fences)
         }
         .unwrap();
         let swapchain_image_index = unsafe {
-            self.device.acquire_next_image_khr(
-                self._swapchain,
+            self.physical.device.acquire_next_image_khr(
+                self.swapchain.swapchain,
                 u64::MAX,
-                Some(self.present_semaphore),
+                Some(self.sync.semaphores[0]),
                 Some(vk::Fence::null()),
                 None,
             )
@@ -277,8 +242,8 @@ impl VulkanApp {
         .unwrap();
         //reset command buffer and start it again
         unsafe {
-            self.device.reset_command_buffer(
-                self.command_buffer[0],
+            self.physical.device.reset_command_buffer(
+                self.command.buffer[0],
                 Some(vk::CommandBufferResetFlags::RELEASE_RESOURCES),
             )
         }
@@ -288,8 +253,8 @@ impl VulkanApp {
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            self.device
-                .begin_command_buffer(self.command_buffer[0], &cmd_begin_info)
+            self.physical.device
+                .begin_command_buffer(self.command.buffer[0], &cmd_begin_info)
                 .unwrap();
         }
         //make a clear-color from frame number. This will flash with a 120*pi frame period.
@@ -310,16 +275,16 @@ impl VulkanApp {
 
         //start the main renderpass
         let rp_info = vk::RenderPassBeginInfoBuilder::new()
-            .render_pass(self.render_pass)
-            .framebuffer(self.framebuffers[swapchain_image_index as usize])
+            .render_pass(self.render_pass.render_pass)
+            .framebuffer(self.render_pass.framebuffers[swapchain_image_index as usize])
             .render_area(vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
-                extent: self.surface_caps.current_extent,
+                extent: self.physical.surface_caps.current_extent,
             })
             .clear_values(&clear_values);
         unsafe {
-            self.device.cmd_begin_render_pass(
-                self.command_buffer[0],
+            self.physical.device.cmd_begin_render_pass(
+                self.command.buffer[0],
                 &rp_info,
                 vk::SubpassContents::INLINE,
             )
@@ -329,15 +294,15 @@ impl VulkanApp {
             	
         unsafe {
             //end renderpass
-            self.device.cmd_end_render_pass(self.command_buffer[0]);
-            self.device
-                .end_command_buffer(self.command_buffer[0])
+            self.physical.device.cmd_end_render_pass(self.command.buffer[0]);
+            self.physical.device
+                .end_command_buffer(self.command.buffer[0])
                 .unwrap();
         }
 
-        let present_semaphores = vec![self.present_semaphore];
-        let render_semaphores = vec![self.render_semaphore];
-        let swapchains = vec![self._swapchain];
+        let present_semaphores = vec![self.sync.semaphores[0]];
+        let render_semaphores = vec![self.sync.semaphores[1]];
+        let swapchains = vec![self.swapchain.swapchain];
         let swapchain_index_indices = vec![swapchain_image_index];
 
         //we can now submit the render pass to the GPU
@@ -345,11 +310,11 @@ impl VulkanApp {
             .wait_semaphores(&present_semaphores)
             .signal_semaphores(&render_semaphores)
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .command_buffers(&self.command_buffer);
+            .command_buffers(&self.command.buffer);
         let submit = vec![submit_info];
         unsafe {
-            self.device
-                .queue_submit(self.graphics_queue, &submit, Some(self.render_fence[0]))
+            self.physical.device
+                .queue_submit(self.physical.graphics_queue, &submit, Some(self.sync.fences[0]))
         }
         .unwrap();
 
@@ -358,8 +323,8 @@ impl VulkanApp {
             .swapchains(&swapchains)
             .image_indices(&swapchain_index_indices);
         unsafe {
-            self.device
-                .queue_present_khr(self.graphics_queue, &present_info)
+            self.physical.device
+                .queue_present_khr(self.physical.graphics_queue, &present_info)
         }
         .unwrap();
     }
@@ -370,38 +335,20 @@ impl Drop for VulkanApp {
     fn drop(&mut self) {
         unsafe {
 
-            self.device.device_wait_idle().unwrap();
+            self.physical.device.device_wait_idle().unwrap();
 
-            self.device
-                .destroy_command_pool(Some(self.command_pool), None);
-            self.device
-                .destroy_swapchain_khr(Some(self._swapchain), None);
-            self.device
-                .destroy_render_pass(Some(self.render_pass), None);
-
-            for &image_view in self._swapchain_image_views.iter() {
-                self.device.destroy_image_view(Some(image_view), None);
-            }
-
-            for &framebuffer in self.framebuffers.iter() {
-                self.device.destroy_framebuffer(Some(framebuffer), None);
-            }
-
+            self.scene.cleanup(&mut self.physical);
             
-            for &fence in self.render_fence.iter() {
-                self.device.destroy_fence(Some(fence), None);
-            }
+            self.sync.cleanup(&self.physical);
 
-            self.device.destroy_semaphore(Some(self.render_semaphore), None);
-            self.device.destroy_semaphore(Some(self.present_semaphore), None);
+            self.command.cleanup(&self.physical);
 
-            self.device.destroy_device(None);
-            self.instance.destroy_surface_khr(Some(self.surface), None);
-            if !self.messenger.is_null() {
-                self.instance
-                    .destroy_debug_utils_messenger_ext(Some(self.messenger), None);
-            }
-            self.instance.destroy_instance(None);
+            self.render_pass.cleanup(&self.physical);
+
+            self.swapchain.cleanup(&self.physical);
+
+            self.physical.cleanup();
+
             println!("exited");
         }
     }
