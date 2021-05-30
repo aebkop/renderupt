@@ -1,20 +1,32 @@
-mod mesh;
-mod device;
-mod swapchain;
-mod renderpass;
 mod commands;
-mod sync;
+mod device;
+mod mesh;
 mod pipeline;
+mod renderpass;
 mod scene;
+mod swapchain;
+mod sync;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
-
 use bytemuck::bytes_of;
-use erupt::{DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader, cstr, utils::surface, vk::{self, AttachmentDescription2Builder, CommandPoolCreateFlags, DebugUtilsMessengerEXT, DeviceMemory, FN_CREATE_DIRECT_FB_SURFACE_EXT, StructureType, SubpassDescription2Builder}};
+use core::f64;
+use erupt::{
+    cstr,
+    utils::surface,
+    vk::{
+        self, AttachmentDescription2Builder, CommandPoolCreateFlags, DebugUtilsMessengerEXT,
+        DeviceMemory, StructureType, SubpassDescription2Builder, FN_CREATE_DIRECT_FB_SURFACE_EXT,
+    },
+    DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader,
+};
 use nalgebra::Vector3;
-use core::{f64};
-use std::{ffi::{c_void, CStr, CString}, mem::{size_of, size_of_val}, os::raw::c_char, ptr::addr_of_mut};
+use std::{
+    ffi::{c_void, CStr, CString},
+    mem::{size_of, size_of_val},
+    os::raw::c_char,
+    ptr::addr_of_mut,
+};
 use vk_shader_macros::include_glsl;
 
 use gpu_alloc::{Config, GpuAllocator, Request, UsageFlags};
@@ -28,9 +40,16 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::engine::{commands::Command, device::Physical, mesh::{Vertex}, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
+use crate::engine::{
+    commands::Command, device::Physical, mesh::Vertex, renderpass::RenderPass,
+    swapchain::Swapchain, sync::SyncStructs,
+};
 
-use self::{mesh::Mesh, pipeline::PipelineStruct, scene::Scene};
+use self::{
+    mesh::Mesh,
+    pipeline::PipelineStruct,
+    scene::{Material, Scene},
+};
 
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
@@ -57,19 +76,19 @@ pub struct VulkanApp {
     command: Command,
     render_pass: RenderPass,
     swapchain: Swapchain,
-    physical: Physical
+    physical: Physical,
 }
 
 impl VulkanApp {
-    pub fn new(window : &Window) -> Self {
+    pub fn new(window: &Window) -> Self {
         //window/wi
-        //this needs to be mut because device and the allocator gets mutated when doing commands 
+        //this needs to be mut because device and the allocator gets mutated when doing commands
         let mut physical = Physical::new(window);
 
         let swapchain = Swapchain::new(&physical);
 
         let render_pass = RenderPass::new(&mut physical, &swapchain);
-        
+
         let command = Command::new(&physical);
 
         let sync = SyncStructs::new(&physical);
@@ -77,52 +96,63 @@ impl VulkanApp {
         let pipeline = PipelineStruct::new(&physical, &render_pass);
 
         let mut scene = Scene::new();
-        let mesh = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/monkey_smooth.obj"), &mut physical);
+        let mesh = Mesh::new(
+            std::path::Path::new(
+                "D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/monkey_smooth.obj",
+            ),
+            &mut physical,
+        );
         let axisangle = Vector3::y() * std::f32::consts::FRAC_PI_2;
         let mesh_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::x(), axisangle);
-        scene.add_render_object_with_mesh_material(mesh, "monkey", scene::Material{pipeline}, "default", mesh_matrix);
+        scene.add_render_object_with_mesh_material(
+            mesh,
+            "monkey",
+            scene::Material { pipeline },
+            "default",
+            mesh_matrix,
+        );
 
-        let triangle_data =  vec![
+        let triangle_data = vec![
             Vertex {
-                pos: [0.5,-0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [0.5, -0.5, -0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [0.5,-0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [0.5, -0.5, 0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [-0.5,-0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [-0.5, -0.5, 0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [-0.5,-0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [-0.5, -0.5, -0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [0.5,0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [0.5, 0.5, -0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [0.5,0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [0.5, 0.5, 0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [-0.5,0.5,0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
+                pos: [-0.5, 0.5, 0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
             },
             Vertex {
-                pos: [-0.5,0.5,-0.5],
-                color: [0.0,1.0,0.0],
-                normal: [0.0,0.0,0.0]
-            }
+                pos: [-0.5, 0.5, -0.5],
+                color: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 0.0],
+            },
         ];
         let data: &[u8] = bytemuck::cast_slice(&triangle_data);
         let size = size_of_val(data);
@@ -132,54 +162,57 @@ impl VulkanApp {
             .usage(vk::BufferUsageFlags::VERTEX_BUFFER);
 
         let mut block = unsafe {
-             physical.allocator.alloc(
-                    EruptMemoryDevice::wrap(&physical.device),
-                    Request {
-                        size: size as u64,
-                        align_mask: 1,
-                        usage: UsageFlags::HOST_ACCESS,
-                        memory_types: !0,
-                    },
-                )
-            }.unwrap();
-                    
-        unsafe {
-            block.write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data).unwrap();
+            physical.allocator.alloc(
+                EruptMemoryDevice::wrap(&physical.device),
+                Request {
+                    size: size as u64,
+                    align_mask: 1,
+                    usage: UsageFlags::HOST_ACCESS,
+                    memory_types: !0,
+                },
+            )
         }
-        
+        .unwrap();
+
+        unsafe {
+            block
+                .write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data)
+                .unwrap();
+        }
+
         let buffer = unsafe { physical.device.create_buffer(&buffer_info, None, None) }.unwrap();
 
         unsafe {
-            physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
+            physical
+                .device
+                .bind_buffer_memory(buffer, *block.memory(), 0)
+                .unwrap();
         }
 
         let allocated_buff = mesh::allocated_buffer {
             buffer,
-            allocation: Some(block)
+            allocation: Some(block),
         };
 
         let triangle = mesh::Mesh {
-            verticies:  triangle_data,
-            vertex_buffer: (
-                allocated_buff
-            ),
-
+            verticies: triangle_data,
+            vertex_buffer: (allocated_buff),
         };
 
-        let cube_matrix: na::Isometry3<f32> = na::Isometry3::new(Vector3::new(5.0,0.0,0.0), na::zero());
+        let cube_matrix: na::Isometry3<f32> =
+            na::Isometry3::new(Vector3::new(5.0, 0.0, 0.0), na::zero());
         scene.add_render_object_with_mesh(triangle, "cube", "default", cube_matrix);
 
-        let cube = Mesh::new(std::path::Path::new("D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj"), &mut physical);
-        let test    : na::Isometry3<f32> = na::Isometry3::new(Vector3::new(10.0,-3.0,3.0), na::zero());
-        scene.add_render_object_with_mesh( cube, "teapot", "default", test);
+        let cube = Mesh::new(
+            std::path::Path::new(
+                "D:/rustprogramming/vulkan-guide/vkguide-erupt/src/assets/teapot.obj",
+            ),
+            &mut physical,
+        );
+        let test: na::Isometry3<f32> =
+            na::Isometry3::new(Vector3::new(10.0, -3.0, 3.0), na::zero());
+        scene.add_render_object_with_mesh(cube, "teapot", "default", test);
 
-        
-
-
-
-
-
-            
         VulkanApp {
             scene,
             sync,
@@ -189,42 +222,75 @@ impl VulkanApp {
             physical,
         }
     }
-    
-    fn draw_objects(&mut self, framenumber: i64)  {
-                //compute push constant
-        let eye    = na::Point3::<f32>::new(0.0, 0.0, 2.0);
+
+    fn draw_objects(&mut self, framenumber: i64) {
+        //compute push constant
+        let eye = na::Point3::<f32>::new(0.0, 0.0, 2.0);
         let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
-        let view   = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
-        let camera_angle      = na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(framenumber as f32 * 0.4));
-        let projection = na::Perspective3::<f32>::new(self.physical.surface_caps.current_extent.width as f32 / self.physical.surface_caps.current_extent.height as f32, 3.14 / 1.5, 0.1, 200.0).into_inner();
-        let material = self.scene.materials.get("default").unwrap();
-        unsafe {
-            self.physical.device.cmd_bind_pipeline(self.command.buffer[0], vk::PipelineBindPoint::GRAPHICS, material.pipeline.pipelines[0]);
+        let view = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
+        let camera_angle = na::Isometry3::<f32>::new(
+            Vector3::zeros(),
+            Vector3::y() * f32::to_radians(framenumber as f32 * 0.4),
+        );
+        let projection = na::Perspective3::<f32>::new(
+            self.physical.surface_caps.current_extent.width as f32
+                / self.physical.surface_caps.current_extent.height as f32,
+            3.14 / 1.5,
+            0.1,
+            200.0,
+        )
+        .into_inner();
+        let mut last_material: Option<&Material> = None;
+        for (a, b, c) in self.scene.objects.iter() {
+            let material = self.scene.materials.get(b).unwrap();
+            if Some(material) != last_material {
+                unsafe {
+                    self.physical.device.cmd_bind_pipeline(
+                        self.command.buffer[0],
+                        vk::PipelineBindPoint::GRAPHICS,
+                        material.pipeline.pipelines[0],
+                    );
+                }
+                last_material = Some(material);
             }
-        for (a,b,c) in self.scene.objects.iter() {
             let mesh = self.scene.meshes.get(a).unwrap();
             let offset: u64 = 0;
-            let model_view_projection:na::Matrix4<f32> = projection * (camera_angle * view * c).to_homogeneous();
+            let model_view_projection: na::Matrix4<f32> =
+                projection * (camera_angle * view * c).to_homogeneous();
 
             unsafe {
-                self.physical.device.cmd_push_constants(self.command.buffer[0], material.pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, size_of_val(model_view_projection.as_slice()) as u32, model_view_projection.as_slice().as_ptr() as *mut c_void);
-                self.physical.device.cmd_bind_vertex_buffers(self.command.buffer[0], 0, &[mesh.vertex_buffer.buffer], &[offset]);
-                self.physical.device.cmd_draw(self.command.buffer[0], mesh.verticies.len() as u32, 1, 0, 0);
+                self.physical.device.cmd_push_constants(
+                    self.command.buffer[0],
+                    material.pipeline.pipeline_layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    size_of_val(model_view_projection.as_slice()) as u32,
+                    model_view_projection.as_slice().as_ptr() as *mut c_void,
+                );
+                self.physical.device.cmd_bind_vertex_buffers(
+                    self.command.buffer[0],
+                    0,
+                    &[mesh.vertex_buffer.buffer],
+                    &[offset],
+                );
+                self.physical.device.cmd_draw(
+                    self.command.buffer[0],
+                    mesh.verticies.len() as u32,
+                    1,
+                    0,
+                    0,
+                );
             }
-
-            
-
         }
     }
 
     //Present semaphore - 0
     //render - 1
-        
-        
 
     pub fn draw(&mut self, framenumber: i64) {
         unsafe {
-            self.physical.device
+            self.physical
+                .device
                 .wait_for_fences(&self.sync.fences, false, u64::MAX)
                 .unwrap();
             self.physical.device.reset_fences(&self.sync.fences)
@@ -248,12 +314,13 @@ impl VulkanApp {
             )
         }
         .unwrap();
-        
+
         let cmd_begin_info = vk::CommandBufferBeginInfoBuilder::new()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            self.physical.device
+            self.physical
+                .device
                 .begin_command_buffer(self.command.buffer[0], &cmd_begin_info)
                 .unwrap();
         }
@@ -269,7 +336,7 @@ impl VulkanApp {
         };
         let depth_stencil = vk::ClearDepthStencilValueBuilder::new().depth(1.0);
         let depth_clear = vk::ClearValue {
-            depth_stencil: *depth_stencil 
+            depth_stencil: *depth_stencil,
         };
         let clear_values = vec![clear_value, depth_clear];
 
@@ -291,11 +358,14 @@ impl VulkanApp {
         };
 
         self.draw_objects(framenumber);
-            	
+
         unsafe {
             //end renderpass
-            self.physical.device.cmd_end_render_pass(self.command.buffer[0]);
-            self.physical.device
+            self.physical
+                .device
+                .cmd_end_render_pass(self.command.buffer[0]);
+            self.physical
+                .device
                 .end_command_buffer(self.command.buffer[0])
                 .unwrap();
         }
@@ -313,8 +383,11 @@ impl VulkanApp {
             .command_buffers(&self.command.buffer);
         let submit = vec![submit_info];
         unsafe {
-            self.physical.device
-                .queue_submit(self.physical.graphics_queue, &submit, Some(self.sync.fences[0]))
+            self.physical.device.queue_submit(
+                self.physical.graphics_queue,
+                &submit,
+                Some(self.sync.fences[0]),
+            )
         }
         .unwrap();
 
@@ -323,22 +396,21 @@ impl VulkanApp {
             .swapchains(&swapchains)
             .image_indices(&swapchain_index_indices);
         unsafe {
-            self.physical.device
+            self.physical
+                .device
                 .queue_present_khr(self.physical.graphics_queue, &present_info)
         }
         .unwrap();
     }
-
 }
 //Instead of a cleanup function the drop trait is used which runs automatically after the value is no longer needed.
 impl Drop for VulkanApp {
     fn drop(&mut self) {
         unsafe {
-
             self.physical.device.device_wait_idle().unwrap();
 
             self.scene.cleanup(&mut self.physical);
-            
+
             self.sync.cleanup(&self.physical);
 
             self.command.cleanup(&self.physical);

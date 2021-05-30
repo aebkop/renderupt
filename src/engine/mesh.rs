@@ -21,7 +21,7 @@ pub struct allocated_buffer {
 
 struct AllocatedImage {
     pub image: vk::Image,
-    pub allocation: MemoryBlock<DeviceMemory>,
+    pub allocation: Option<MemoryBlock<DeviceMemory>>,
 }
 
 #[repr(C)]

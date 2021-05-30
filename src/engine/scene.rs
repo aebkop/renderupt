@@ -6,7 +6,7 @@ use nalgebra::Isometry3;
 
 use super::{device::Physical, mesh::Mesh, pipeline::PipelineStruct};
 
-
+#[derive(PartialEq)]
 pub struct Material {
     pub pipeline: PipelineStruct
 }

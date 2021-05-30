@@ -7,7 +7,7 @@ use erupt::{vk::{self}};
 use vk_shader_macros::include_glsl;
 const FRAG: &[u32] = include_glsl!("src/shaders/colored-triangle.frag", kind: frag);
 const TRIMESH: &[u32] = include_glsl!("src/shaders/trimesh.vert");
-
+#[derive(PartialEq)]
 pub struct PipelineStruct {
     pub pipelines: Vec<vk::Pipeline>,
     pub pipeline_layout: vk::PipelineLayout
