@@ -48,8 +48,8 @@ impl Scene{
 
     pub fn cleanup(&mut self, physical: &mut Physical) {
         unsafe { 
-        for (_, mesh) in self.meshes.iter() {
-    //        physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device),mesh.vertex_buffer.allocation);
+        for (_, mesh) in self.meshes.iter_mut() {
+            physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device),mesh.vertex_buffer.allocation.take().unwrap());
             physical.device.destroy_buffer(Some(mesh.vertex_buffer.buffer), None);
         }
         for (_, material) in self.materials.iter() {

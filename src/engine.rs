@@ -155,7 +155,7 @@ impl VulkanApp {
 
         let allocated_buff = mesh::allocated_buffer {
             buffer,
-            allocation: block
+            allocation: Some(block)
         };
 
         let triangle = mesh::Mesh {
@@ -343,7 +343,7 @@ impl Drop for VulkanApp {
 
             self.command.cleanup(&self.physical);
 
-            self.render_pass.cleanup(&self.physical);
+            self.render_pass.cleanup(&mut self.physical);
 
             self.swapchain.cleanup(&self.physical);
 

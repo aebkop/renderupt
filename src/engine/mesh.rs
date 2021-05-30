@@ -16,8 +16,9 @@ use super::device::Physical;
 #[derive(Debug)]
 pub struct allocated_buffer {
     pub buffer: vk::Buffer,
-    pub allocation: MemoryBlock<DeviceMemory>,
+    pub allocation: Option<MemoryBlock<DeviceMemory>>
 }
+
 struct AllocatedImage {
     pub image: vk::Image,
     pub allocation: MemoryBlock<DeviceMemory>,
@@ -193,7 +194,7 @@ impl Mesh {
 
         let allocated_buff = allocated_buffer {
             buffer,
-            allocation: block
+            allocation: Some(block)
         };
 
         Mesh {
@@ -204,9 +205,4 @@ impl Mesh {
         }
 
     }
-    pub fn cleanup(&mut self, physical: &mut Physical) { 
-        unsafe { 
-//      physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device), self.vertex_buffer.allocation);
-        physical.device.destroy_buffer(Some(self.vertex_buffer.buffer), None);
-    }}
 }

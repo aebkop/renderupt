@@ -1,12 +1,16 @@
 use super::{device::Physical, swapchain::Swapchain};
 
 
-use erupt::{vk::{self}};
+use erupt::{vk::{self, DeviceMemory}};
+use gpu_alloc::MemoryBlock;
 use gpu_alloc_erupt::EruptMemoryDevice;
 
 pub struct RenderPass {
     pub framebuffers: Vec<vk::Framebuffer>,
-    pub render_pass: vk::RenderPass
+    pub render_pass: vk::RenderPass,
+    depth_image: vk::Image,
+    depth_image_view: vk::ImageView,
+    depth_image_allocation: Option<MemoryBlock<DeviceMemory>>
 
 }
 
@@ -113,12 +117,18 @@ let framebuffers: Vec<_> = swapchain.image_views
 
     RenderPass {
         framebuffers,
-        render_pass
+        render_pass,
+        depth_image: image,
+        depth_image_view,
+        depth_image_allocation: Some(block)
     }
+}
 
-    }
-    pub fn cleanup(&mut self, physical: &Physical) {
+    pub fn cleanup(&mut self, physical: &mut Physical) {
         unsafe { 
+            physical.device.destroy_image(Some(self.depth_image), None);
+            physical.device.destroy_image_view(Some(self.depth_image_view), None);
+            physical.allocator.dealloc(EruptMemoryDevice::wrap(&physical.device), self.depth_image_allocation.take().unwrap());
         for framebuffer in self.framebuffers.iter() {
             physical.device.destroy_framebuffer(Some(*framebuffer), None);
         }
