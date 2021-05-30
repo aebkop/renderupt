@@ -223,9 +223,8 @@ impl VulkanApp {
         }
     }
 
-    fn draw_objects(&mut self, framenumber: i64) {
+    fn draw_objects(&mut self, framenumber: i64, eye: na::Point3<f32>) {
         //compute push constant
-        let eye = na::Point3::<f32>::new(0.0, 0.0, 2.0);
         let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
         let view = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
         let camera_angle = na::Isometry3::<f32>::new(
@@ -287,7 +286,7 @@ impl VulkanApp {
     //Present semaphore - 0
     //render - 1
 
-    pub fn draw(&mut self, framenumber: i64) {
+    pub fn draw(&mut self, framenumber: i64, camera_pos: na::Point3<f32>) {
         unsafe {
             self.physical
                 .device
@@ -357,7 +356,7 @@ impl VulkanApp {
             )
         };
 
-        self.draw_objects(framenumber);
+        self.draw_objects(framenumber, camera_pos);
 
         unsafe {
             //end renderpass
