@@ -1,10 +1,9 @@
-use winit::event_loop::EventLoop;
 
 
 mod engine;
 mod window;
 fn main() {
-    let window = window::start();
+    let _window = window::start();
     
     
 }

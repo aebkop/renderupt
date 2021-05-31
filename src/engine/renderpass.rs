@@ -40,7 +40,7 @@ impl RenderPass {
         usage: gpu_alloc::UsageFlags::FAST_DEVICE_ACCESS,
         memory_types: mem_requirements.memory_type_bits,
     };
-    let mut block = unsafe { physical.allocator.alloc(EruptMemoryDevice::wrap(&physical.device), alloc_request) }.unwrap();
+    let block = unsafe { physical.allocator.alloc(EruptMemoryDevice::wrap(&physical.device), alloc_request) }.unwrap();
 
     unsafe {
         physical.device.bind_image_memory(image,*block.memory(),0).unwrap();
@@ -85,14 +85,14 @@ let depth_attachment_ref = vk::AttachmentReference2Builder::new()
 
 let color_attach_slice = &[color_attachment_ref];
 
-let mut subpass = vk::SubpassDescription2Builder::new()
+let subpass = vk::SubpassDescription2Builder::new()
     .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
     .color_attachments(color_attach_slice)
     .depth_stencil_attachment(&depth_attachment_ref);
 
 let attachments = [color_attachment,depth_attachment];
 let subpasses = [subpass];
-let mut render_pass_info = vk::RenderPassCreateInfo2Builder::new()
+let render_pass_info = vk::RenderPassCreateInfo2Builder::new()
     .attachments(&attachments)
     .subpasses(&subpasses);            
 

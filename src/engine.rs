@@ -9,35 +9,22 @@ mod sync;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
-use bytemuck::bytes_of;
-use core::f64;
 use erupt::{
-    cstr,
-    utils::surface,
     vk::{
-        self, AttachmentDescription2Builder, CommandPoolCreateFlags, DebugUtilsMessengerEXT,
-        DeviceMemory, StructureType, SubpassDescription2Builder, FN_CREATE_DIRECT_FB_SURFACE_EXT,
+        self
     },
-    DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader,
 };
 use nalgebra::Vector3;
 use std::{
-    ffi::{c_void, CStr, CString},
-    mem::{size_of, size_of_val},
-    os::raw::c_char,
-    ptr::addr_of_mut,
+    ffi::{c_void},
+    mem::{size_of_val},
 };
-use vk_shader_macros::include_glsl;
 
-use gpu_alloc::{Config, GpuAllocator, Request, UsageFlags};
-use gpu_alloc_erupt::{device_properties as device_properties_alloc, EruptMemoryDevice};
+use gpu_alloc::{Request, UsageFlags};
+use gpu_alloc_erupt::{EruptMemoryDevice};
 
 use winit::{
-    event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, StartCause, VirtualKeyCode, WindowEvent,
-    },
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    window::{Window},
 };
 
 use crate::engine::{
@@ -50,24 +37,6 @@ use self::{
     pipeline::PipelineStruct,
     scene::{Material, Scene},
 };
-
-const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
-const VALIDATION_LAYERS_WANTED: bool = true;
-
-//debug_callback for the validation layers
-unsafe extern "system" fn debug_callback(
-    _message_severity: vk::DebugUtilsMessageSeverityFlagBitsEXT,
-    _message_types: vk::DebugUtilsMessageTypeFlagsEXT,
-    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _p_user_data: *mut c_void,
-) -> vk::Bool32 {
-    eprintln!(
-        "{}",
-        CStr::from_ptr((*p_callback_data).p_message).to_string_lossy()
-    );
-
-    vk::FALSE
-}
 
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
@@ -241,16 +210,16 @@ impl VulkanApp {
         .into_inner();
         let mut last_material: Option<&Material> = None;
         for (a, b, c) in self.scene.objects.iter() {
-            let material = self.scene.materials.get(b).unwrap();
-            if Some(material) != last_material {
+            let material = self.scene.materials.get(b);
+            if material != last_material {
                 unsafe {
                     self.physical.device.cmd_bind_pipeline(
                         self.command.buffer[0],
                         vk::PipelineBindPoint::GRAPHICS,
-                        material.pipeline.pipelines[0],
+                        material.unwrap().pipeline.pipelines[0],
                     );
                 }
-                last_material = Some(material);
+                last_material = material;
             }
             let mesh = self.scene.meshes.get(a).unwrap();
             let offset: u64 = 0;
@@ -260,7 +229,7 @@ impl VulkanApp {
             unsafe {
                 self.physical.device.cmd_push_constants(
                     self.command.buffer[0],
-                    material.pipeline.pipeline_layout,
+                    material.unwrap().pipeline.pipeline_layout,
                     vk::ShaderStageFlags::VERTEX,
                     0,
                     size_of_val(model_view_projection.as_slice()) as u32,

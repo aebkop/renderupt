@@ -4,7 +4,7 @@ const VALIDATION_LAYERS_WANTED: bool = true;
 use std::{ffi::{CStr, CString, c_void}, os::raw::c_char};
 
 use erupt::{DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader, cstr, utils::surface, vk::{self, DeviceMemory}};
-use gpu_alloc::{Config, GpuAllocator, Request, UsageFlags};
+use gpu_alloc::{Config, GpuAllocator};
 use gpu_alloc_erupt::{device_properties as device_properties_alloc, EruptMemoryDevice};
 use winit::window::Window;
 
@@ -194,7 +194,7 @@ impl Physical {
         let queue_info = vec![vk::DeviceQueueCreateInfoBuilder::new()
             .queue_family_index(queue_family)
             .queue_priorities(&[1.0])];
-        let mut features = vk::PhysicalDeviceFeaturesBuilder::new();
+        let features = vk::PhysicalDeviceFeaturesBuilder::new();
             
         
         let mut test2 = vk::PhysicalDeviceVulkan12FeaturesBuilder::new()
@@ -221,7 +221,7 @@ impl Physical {
     
         let config = Config::i_am_potato();
 
-        let mut gpu_alloc = GpuAllocator::new(config, device_properties_alloc);
+        let gpu_alloc = GpuAllocator::new(config, device_properties_alloc);
 
         //create a swapchain
         let surface_caps = unsafe {

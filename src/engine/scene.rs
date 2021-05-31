@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, hash::Hash, iter::Map};
+use std::{collections::{HashMap}};
 
-use erupt::{vk::{self}};
+use erupt::{vk};
 use gpu_alloc_erupt::EruptMemoryDevice;
 use nalgebra::Isometry3;
 

@@ -13,7 +13,7 @@ impl SyncStructs {
         //we want to create the fence with the Create Signaled flag, so we can wait on it before using it on a GPU command (for the first frame)
 
         //don't need any info for the semaphore
-        let mut semaphore_create_info = vk::SemaphoreCreateInfoBuilder::new();
+        let semaphore_create_info = vk::SemaphoreCreateInfoBuilder::new();
 
         let render_semaphore =
             unsafe { physical.device.create_semaphore(&semaphore_create_info, None, None) }.unwrap();
