@@ -1,36 +1,33 @@
-mod commands;
 mod device;
+mod frame;
 mod mesh;
 mod pipeline;
 mod renderpass;
 mod scene;
 mod swapchain;
-mod sync;
-mod frame;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
-use erupt::{
-    vk::{
-        self
-    },
-};
+use erupt::vk::{self};
 use nalgebra::Vector3;
-use std::{
-    ffi::{c_void},
-    mem::{size_of_val},
-};
+use std::{ffi::c_void, mem::size_of_val};
 
 use gpu_alloc::{Request, UsageFlags};
-use gpu_alloc_erupt::{EruptMemoryDevice};
+use gpu_alloc_erupt::EruptMemoryDevice;
 
-use winit::{
-    window::{Window},
+use winit::window::Window;
+
+use crate::engine::{
+    device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass,
+    swapchain::Swapchain
 };
 
-use crate::engine::{commands::Command, device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
-
-use self::{frame::Frame, mesh::Mesh, pipeline::PipelineStruct, scene::{Material, Scene}};
+use self::{
+    frame::Frame,
+    mesh::Mesh,
+    pipeline::PipelineStruct,
+    scene::{Material, Scene},
+};
 
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
@@ -251,7 +248,9 @@ impl VulkanApp {
                 .device
                 .wait_for_fences(&[self.get_frame(framenumber).render_fence], false, u64::MAX)
                 .unwrap();
-            self.physical.device.reset_fences(&[self.get_frame(framenumber).render_fence])
+            self.physical
+                .device
+                .reset_fences(&[self.get_frame(framenumber).render_fence])
         }
         .unwrap();
         let swapchain_image_index = unsafe {
@@ -333,7 +332,6 @@ impl VulkanApp {
         let render_semaphore = [self.get_frame(framenumber).render_semaphore];
         let present_semaphore = [self.get_frame(framenumber).present_semaphore];
         let command_buffer = [self.get_frame(framenumber).command_buffer];
-
 
         //we can now submit the render pass to the GPU
         let submit_info = vk::SubmitInfoBuilder::new()
