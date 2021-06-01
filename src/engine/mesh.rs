@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use super::device::Physical;
 #[derive(Debug)]
-pub struct allocated_buffer {
+pub struct AllocatedBuffer {
     pub buffer: vk::Buffer,
     pub allocation: Option<MemoryBlock<DeviceMemory>>
 }
@@ -35,7 +35,7 @@ pub struct Vertex {
 #[repr(C)]
 pub struct Mesh {
     pub verticies: Vec<Vertex>,
-    pub vertex_buffer: allocated_buffer,
+    pub vertex_buffer: AllocatedBuffer,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -192,7 +192,7 @@ impl Mesh {
             physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
         }
 
-        let allocated_buff = allocated_buffer {
+        let allocated_buff = AllocatedBuffer {
             buffer,
             allocation: Some(block)
         };

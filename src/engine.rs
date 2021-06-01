@@ -6,6 +6,7 @@ mod renderpass;
 mod scene;
 mod swapchain;
 mod sync;
+mod frame;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -27,22 +28,14 @@ use winit::{
     window::{Window},
 };
 
-use crate::engine::{
-    commands::Command, device::Physical, mesh::Vertex, renderpass::RenderPass,
-    swapchain::Swapchain, sync::SyncStructs,
-};
+use crate::engine::{commands::Command, device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass, swapchain::Swapchain, sync::SyncStructs};
 
-use self::{
-    mesh::Mesh,
-    pipeline::PipelineStruct,
-    scene::{Material, Scene},
-};
+use self::{frame::Frame, mesh::Mesh, pipeline::PipelineStruct, scene::{Material, Scene}};
 
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
     scene: Scene,
-    sync: SyncStructs,
-    command: Command,
+    frames: Frames,
     render_pass: RenderPass,
     swapchain: Swapchain,
     physical: Physical,
@@ -58,9 +51,7 @@ impl VulkanApp {
 
         let render_pass = RenderPass::new(&mut physical, &swapchain);
 
-        let command = Command::new(&physical);
-
-        let sync = SyncStructs::new(&physical);
+        let frames = Frames::new(2, &mut physical);
 
         let pipeline = PipelineStruct::new(&physical, &render_pass);
 
@@ -158,7 +149,7 @@ impl VulkanApp {
                 .unwrap();
         }
 
-        let allocated_buff = mesh::allocated_buffer {
+        let allocated_buff = mesh::AllocatedBuffer {
             buffer,
             allocation: Some(block),
         };
@@ -184,8 +175,7 @@ impl VulkanApp {
 
         VulkanApp {
             scene,
-            sync,
-            command,
+            frames,
             render_pass,
             swapchain,
             physical,
@@ -214,7 +204,7 @@ impl VulkanApp {
             if material != last_material {
                 unsafe {
                     self.physical.device.cmd_bind_pipeline(
-                        self.command.buffer[0],
+                        self.get_frame(framenumber).command_buffer,
                         vk::PipelineBindPoint::GRAPHICS,
                         material.unwrap().pipeline.pipelines[0],
                     );
@@ -228,7 +218,7 @@ impl VulkanApp {
 
             unsafe {
                 self.physical.device.cmd_push_constants(
-                    self.command.buffer[0],
+                    self.get_frame(framenumber).command_buffer,
                     material.unwrap().pipeline.pipeline_layout,
                     vk::ShaderStageFlags::VERTEX,
                     0,
@@ -236,13 +226,13 @@ impl VulkanApp {
                     model_view_projection.as_slice().as_ptr() as *mut c_void,
                 );
                 self.physical.device.cmd_bind_vertex_buffers(
-                    self.command.buffer[0],
+                    self.get_frame(framenumber).command_buffer,
                     0,
                     &[mesh.vertex_buffer.buffer],
                     &[offset],
                 );
                 self.physical.device.cmd_draw(
-                    self.command.buffer[0],
+                    self.get_frame(framenumber).command_buffer,
                     mesh.verticies.len() as u32,
                     1,
                     0,
@@ -259,16 +249,16 @@ impl VulkanApp {
         unsafe {
             self.physical
                 .device
-                .wait_for_fences(&self.sync.fences, false, u64::MAX)
+                .wait_for_fences(&[self.get_frame(framenumber).render_fence], false, u64::MAX)
                 .unwrap();
-            self.physical.device.reset_fences(&self.sync.fences)
+            self.physical.device.reset_fences(&[self.get_frame(framenumber).render_fence])
         }
         .unwrap();
         let swapchain_image_index = unsafe {
             self.physical.device.acquire_next_image_khr(
                 self.swapchain.swapchain,
                 u64::MAX,
-                Some(self.sync.semaphores[0]),
+                Some(self.get_frame(framenumber).present_semaphore),
                 Some(vk::Fence::null()),
                 None,
             )
@@ -277,7 +267,7 @@ impl VulkanApp {
         //reset command buffer and start it again
         unsafe {
             self.physical.device.reset_command_buffer(
-                self.command.buffer[0],
+                self.get_frame(framenumber).command_buffer,
                 Some(vk::CommandBufferResetFlags::RELEASE_RESOURCES),
             )
         }
@@ -289,7 +279,7 @@ impl VulkanApp {
         unsafe {
             self.physical
                 .device
-                .begin_command_buffer(self.command.buffer[0], &cmd_begin_info)
+                .begin_command_buffer(self.get_frame(framenumber).command_buffer, &cmd_begin_info)
                 .unwrap();
         }
         //make a clear-color from frame number. This will flash with a 120*pi frame period.
@@ -319,7 +309,7 @@ impl VulkanApp {
             .clear_values(&clear_values);
         unsafe {
             self.physical.device.cmd_begin_render_pass(
-                self.command.buffer[0],
+                self.get_frame(framenumber).command_buffer,
                 &rp_info,
                 vk::SubpassContents::INLINE,
             )
@@ -331,36 +321,38 @@ impl VulkanApp {
             //end renderpass
             self.physical
                 .device
-                .cmd_end_render_pass(self.command.buffer[0]);
+                .cmd_end_render_pass(self.get_frame(framenumber).command_buffer);
             self.physical
                 .device
-                .end_command_buffer(self.command.buffer[0])
+                .end_command_buffer(self.get_frame(framenumber).command_buffer)
                 .unwrap();
         }
 
-        let present_semaphores = vec![self.sync.semaphores[0]];
-        let render_semaphores = vec![self.sync.semaphores[1]];
         let swapchains = vec![self.swapchain.swapchain];
         let swapchain_index_indices = vec![swapchain_image_index];
+        let render_semaphore = [self.get_frame(framenumber).render_semaphore];
+        let present_semaphore = [self.get_frame(framenumber).present_semaphore];
+        let command_buffer = [self.get_frame(framenumber).command_buffer];
+
 
         //we can now submit the render pass to the GPU
         let submit_info = vk::SubmitInfoBuilder::new()
-            .wait_semaphores(&present_semaphores)
-            .signal_semaphores(&render_semaphores)
+            .wait_semaphores(&present_semaphore)
+            .signal_semaphores(&render_semaphore)
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .command_buffers(&self.command.buffer);
+            .command_buffers(&command_buffer);
         let submit = vec![submit_info];
         unsafe {
             self.physical.device.queue_submit(
                 self.physical.graphics_queue,
                 &submit,
-                Some(self.sync.fences[0]),
+                Some(self.get_frame(framenumber).render_fence),
             )
         }
         .unwrap();
 
         let present_info = vk::PresentInfoKHRBuilder::new()
-            .wait_semaphores(&render_semaphores)
+            .wait_semaphores(&render_semaphore)
             .swapchains(&swapchains)
             .image_indices(&swapchain_index_indices);
         unsafe {
@@ -369,6 +361,11 @@ impl VulkanApp {
                 .queue_present_khr(self.physical.graphics_queue, &present_info)
         }
         .unwrap();
+    }
+
+    fn get_frame(&self, framenumber: i64) -> &Frame {
+        let frame_count: usize = framenumber as usize % 2 as usize;
+        return &self.frames.frames[frame_count];
     }
 }
 //Instead of a cleanup function the drop trait is used which runs automatically after the value is no longer needed.
@@ -379,9 +376,7 @@ impl Drop for VulkanApp {
 
             self.scene.cleanup(&mut self.physical);
 
-            self.sync.cleanup(&self.physical);
-
-            self.command.cleanup(&self.physical);
+            self.frames.cleanup(&mut self.physical);
 
             self.render_pass.cleanup(&mut self.physical);
 
