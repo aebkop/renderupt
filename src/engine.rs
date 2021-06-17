@@ -5,6 +5,8 @@ mod pipeline;
 mod renderpass;
 mod scene;
 mod swapchain;
+mod camera;
+mod buffer;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -185,7 +187,7 @@ impl VulkanApp {
         let view = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
         let camera_angle = na::Isometry3::<f32>::new(
             Vector3::zeros(),
-            Vector3::y() * f32::to_radians(framenumber as f32 * 0.4),
+            Vector3::y() * f32::to_radians(0.0),
         );
         let projection = na::Perspective3::<f32>::new(
             self.physical.surface_caps.current_extent.width as f32

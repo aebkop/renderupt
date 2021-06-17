@@ -57,7 +57,7 @@ impl Scene{
             for pipeline in &material.pipeline.pipelines {
                 physical.device.destroy_pipeline(Some(*pipeline), None);
             }
-        }
+        }   
     }}
 }
 
