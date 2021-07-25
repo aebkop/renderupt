@@ -1,3 +1,6 @@
+mod buffer;
+mod camera;
+mod descriptors;
 mod device;
 mod frame;
 mod mesh;
@@ -5,8 +8,6 @@ mod pipeline;
 mod renderpass;
 mod scene;
 mod swapchain;
-mod camera;
-mod buffer;
 extern crate nalgebra as na;
 extern crate nalgebra_glm as glm;
 
@@ -19,10 +20,7 @@ use gpu_alloc_erupt::EruptMemoryDevice;
 
 use winit::window::Window;
 
-use crate::engine::{
-    device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass,
-    swapchain::Swapchain
-};
+use crate::engine::{descriptors::Descriptors, device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass, swapchain::Swapchain};
 
 use self::{
     frame::Frame,
@@ -34,6 +32,7 @@ use self::{
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
     scene: Scene,
+    descs: Descriptors,
     frames: Frames,
     render_pass: RenderPass,
     swapchain: Swapchain,
@@ -52,7 +51,9 @@ impl VulkanApp {
 
         let frames = Frames::new(2, &mut physical);
 
-        let pipeline = PipelineStruct::new(&physical, &render_pass);
+        let descs = Descriptors::new(&physical);
+
+        let pipeline = PipelineStruct::new(&physical, &render_pass, &descs);
 
         let mut scene = Scene::new();
         let mesh = Mesh::new(
@@ -174,6 +175,7 @@ impl VulkanApp {
 
         VulkanApp {
             scene,
+            descs,
             frames,
             render_pass,
             swapchain,
@@ -185,10 +187,8 @@ impl VulkanApp {
         //compute push constant
         let target = na::Point3::<f32>::new(1.0, 0.0, 0.0);
         let view = na::Isometry3::<f32>::look_at_rh(&eye, &target, &Vector3::y());
-        let camera_angle = na::Isometry3::<f32>::new(
-            Vector3::zeros(),
-            Vector3::y() * f32::to_radians(0.0),
-        );
+        let camera_angle =
+            na::Isometry3::<f32>::new(Vector3::zeros(), Vector3::y() * f32::to_radians(0.0));
         let projection = na::Perspective3::<f32>::new(
             self.physical.surface_caps.current_extent.width as f32
                 / self.physical.surface_caps.current_extent.height as f32,
@@ -375,6 +375,8 @@ impl Drop for VulkanApp {
             self.physical.device.device_wait_idle().unwrap();
 
             self.scene.cleanup(&mut self.physical);
+
+            self.descs.cleanup(&mut self.physical);
 
             self.frames.cleanup(&mut self.physical);
 

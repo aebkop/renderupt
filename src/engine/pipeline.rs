@@ -2,30 +2,38 @@ use std::{ffi::CString, mem::size_of};
 
 use crate::engine::mesh;
 
-use super::{device::Physical, renderpass::RenderPass};
-use erupt::{vk::{self}};
+use super::{descriptors::Descriptors, device::Physical, renderpass::RenderPass};
+use erupt::vk::{self};
 use vk_shader_macros::include_glsl;
 const FRAG: &[u32] = include_glsl!("src/shaders/colored-triangle.frag", kind: frag);
 const TRIMESH: &[u32] = include_glsl!("src/shaders/trimesh.vert");
 #[derive(PartialEq)]
 pub struct PipelineStruct {
     pub pipelines: Vec<vk::Pipeline>,
-    pub pipeline_layout: vk::PipelineLayout
+    pub pipeline_layout: vk::PipelineLayout,
 }
-//Cleanup for this class is done in the scene class 
+//Cleanup for this class is done in the scene class
 //This class is never used directly, but only via the Scene class.
 impl PipelineStruct {
-    pub fn new(physical: &Physical, render_pass: &RenderPass) -> Self {
-                //Pipeline starts here
+    pub fn new(physical: &Physical, render_pass: &RenderPass, descs: &Descriptors) -> Self {
+        //Pipeline starts here
         //Shader Modules
         let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(FRAG);
-        let frag_module = unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
+        let frag_module = unsafe {
+            physical
+                .device
+                .create_shader_module(&module_info, None, None)
+        }
+        .unwrap();
         let module_info = vk::ShaderModuleCreateInfoBuilder::new().code(TRIMESH);
         let entry_point = CString::new("main").unwrap();
-        let tri_mesh =
-            unsafe {  physical.device.create_shader_module(&module_info, None, None) }.unwrap();
+        let tri_mesh = unsafe {
+            physical
+                .device
+                .create_shader_module(&module_info, None, None)
+        }
+        .unwrap();
 
-    
         let shader_stages = vec![
             vk::PipelineShaderStageCreateInfoBuilder::new()
                 .stage(vk::ShaderStageFlagBits::VERTEX)
@@ -97,46 +105,56 @@ impl PipelineStruct {
             .min_depth_bounds(0.0)
             .max_depth_bounds(1.0)
             .stencil_test_enable(false);
-        
+
         let push_constant = [vk::PushConstantRangeBuilder::new()
             .offset(0)
             .size(size_of::<[f32; 16]>() as u32)
             .stage_flags(vk::ShaderStageFlags::VERTEX)];
+        
+        let global_set_layout = [descs.global_set_layout];
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfoBuilder::new()
-            .push_constant_ranges(&push_constant);
-        let pipeline_layout =
-            unsafe { physical.device.create_pipeline_layout(&pipeline_layout_info, None, None) }.unwrap();
+            .push_constant_ranges(&push_constant)
+            .set_layouts(&global_set_layout);
+        let pipeline_layout = unsafe {
+            physical
+                .device
+                .create_pipeline_layout(&pipeline_layout_info, None, None)
+        }
+        .unwrap();
 
-        let pipeline_infos = vec![
-            vk::GraphicsPipelineCreateInfoBuilder::new()
-                //Colored Triangle
-                .stages(&shader_stages)
-                .vertex_input_state(&vertex_input)
-                .input_assembly_state(&input_assembly)
-                .viewport_state(&viewport_state)
-                .rasterization_state(&rasterizer)
-                .multisample_state(&multisampling)
-                .color_blend_state(&color_blending)
-                .layout(pipeline_layout)
-                .render_pass(render_pass.render_pass)
-                .depth_stencil_state(&pipeline_depth_stencil_info)
-                .subpass(0),
-        ];
+        let pipeline_infos = vec![vk::GraphicsPipelineCreateInfoBuilder::new()
+            //Colored Triangle
+            .stages(&shader_stages)
+            .vertex_input_state(&vertex_input)
+            .input_assembly_state(&input_assembly)
+            .viewport_state(&viewport_state)
+            .rasterization_state(&rasterizer)
+            .multisample_state(&multisampling)
+            .color_blend_state(&color_blending)
+            .layout(pipeline_layout)
+            .render_pass(render_pass.render_pass)
+            .depth_stencil_state(&pipeline_depth_stencil_info)
+            .subpass(0)];
 
-        let pipelines =
-            unsafe { physical.device.create_graphics_pipelines(None, &pipeline_infos, None) }.unwrap();
+        let pipelines = unsafe {
+            physical
+                .device
+                .create_graphics_pipelines(None, &pipeline_infos, None)
+        }
+        .unwrap();
 
         //delete shader modules now.
-        unsafe { 
-            physical.device.destroy_shader_module(Some(frag_module),None);
-            physical.device.destroy_shader_module(Some(tri_mesh),None);
+        unsafe {
+            physical
+                .device
+                .destroy_shader_module(Some(frag_module), None);
+            physical.device.destroy_shader_module(Some(tri_mesh), None);
         };
 
         PipelineStruct {
             pipelines: pipelines,
-            pipeline_layout
+            pipeline_layout,
         }
     }
 }
-

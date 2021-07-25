@@ -1,9 +1,17 @@
 const LAYER_KHRONOS_VALIDATION: *const c_char = cstr!("VK_LAYER_KHRONOS_validation");
 const VALIDATION_LAYERS_WANTED: bool = true;
 
-use std::{ffi::{CStr, CString, c_void}, os::raw::c_char};
+use std::{
+    ffi::{c_void, CStr, CString},
+    os::raw::c_char,
+};
 
-use erupt::{DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader, cstr, utils::surface, vk::{self, DeviceMemory}};
+use erupt::{
+    cstr,
+    utils::surface,
+    vk::{self, DeviceMemory},
+    DeviceLoader, EntryLoader, ExtendableFrom, InstanceLoader,
+};
 use gpu_alloc::{Config, GpuAllocator};
 use gpu_alloc_erupt::{device_properties as device_properties_alloc, EruptMemoryDevice};
 use winit::window::Window;
@@ -34,12 +42,11 @@ pub struct Physical {
     pub messenger: vk::DebugUtilsMessengerEXT,
     pub surface: vk::SurfaceKHR,
     pub instance: InstanceLoader,
-    pub entry: EntryLoader<libloading::Library>
+    pub entry: EntryLoader<libloading::Library>,
 }
 
 impl Physical {
     pub fn new(window: &Window) -> Self {
-
         let entry = EntryLoader::new().unwrap();
 
         let application_name = CString::new("Renderupt").unwrap();
@@ -47,7 +54,7 @@ impl Physical {
             vk::ApplicationInfoBuilder::new()
                 .api_version(vk::make_version(1, 2, 0))
                 .application_name(&application_name)
-                .engine_version(vk::make_version(1, 1, 0))
+                .engine_version(vk::make_version(1, 1, 0)),
         );
 
         //set up required extension + swapchain + validation
@@ -62,7 +69,10 @@ impl Physical {
         }
 
         // swapchian extension wanted as well
-        let device_extensions = vec![vk::KHR_SWAPCHAIN_EXTENSION_NAME, vk::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME];
+        let device_extensions = vec![
+            vk::KHR_SWAPCHAIN_EXTENSION_NAME,
+            vk::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        ];
 
         let mut device_layers = Vec::new();
         if VALIDATION_LAYERS_WANTED {
@@ -74,7 +84,7 @@ impl Physical {
             .enabled_extension_names(&instance_extensions)
             .enabled_layer_names(&instance_layers);
 
-        let instance =  InstanceLoader::new(&entry, &instance_info, None).unwrap();
+        let instance = InstanceLoader::new(&entry, &instance_info, None).unwrap();
 
         let messenger = if VALIDATION_LAYERS_WANTED {
             let messenger_info = vk::DebugUtilsMessengerCreateInfoEXTBuilder::new()
@@ -164,7 +174,7 @@ impl Physical {
                                 CStr::from_ptr(properties.extension_name.as_ptr())
                                     == device_extension
                             })
-                        }); 
+                        });
 
                     if !device_extensions_supported {
                         return None;
@@ -195,14 +205,12 @@ impl Physical {
             .queue_family_index(queue_family)
             .queue_priorities(&[1.0])];
         let features = vk::PhysicalDeviceFeaturesBuilder::new();
-            
-        
-        let mut test2 = vk::PhysicalDeviceVulkan12FeaturesBuilder::new()
-            .buffer_device_address(true);
-                   
+
+        let mut test2 =
+            vk::PhysicalDeviceVulkan12FeaturesBuilder::new().buffer_device_address(true);
+
         let mut device_features2_builder =
             vk::PhysicalDeviceFeatures2Builder::new().extend_from(&mut test2);
-
 
         //set features and extensions enabled in the device
         let device_info = vk::DeviceCreateInfoBuilder::new()
@@ -210,26 +218,24 @@ impl Physical {
             .enabled_extension_names(&device_extensions)
             .enabled_layer_names(&device_layers)
             .extend_from(&mut device_features2_builder);
-            
-        let device_properties_alloc = unsafe { device_properties_alloc(&instance, physical_device)}.unwrap();
-        
+
+        let device_properties_alloc =
+            unsafe { device_properties_alloc(&instance, physical_device) }.unwrap();
+
         //finally have a device and queue
-        let device =
-            DeviceLoader::new(&instance, physical_device, &device_info, None).unwrap();
+        let device = DeviceLoader::new(&instance, physical_device, &device_info, None).unwrap();
         let queue = unsafe { device.get_device_queue(queue_family, 0, None) };
 
-    
         let config = Config::i_am_potato();
 
         let gpu_alloc = GpuAllocator::new(config, device_properties_alloc);
 
         //create a swapchain
         let surface_caps = unsafe {
-                instance.get_physical_device_surface_capabilities_khr(physical_device, surface, None)
-            }
-                .unwrap();
-        
-        
+            instance.get_physical_device_surface_capabilities_khr(physical_device, surface, None)
+        }
+        .unwrap();
+
         Physical {
             surface_caps,
             allocator: gpu_alloc,
@@ -242,18 +248,19 @@ impl Physical {
             surface,
             instance,
             entry,
-            
         }
     }
     pub fn cleanup(&mut self) {
-        unsafe { 
-        self.allocator.cleanup(EruptMemoryDevice::wrap(&self.device));
-        self.device.destroy_device(None);
-        self.instance.destroy_surface_khr(Some(self.surface), None);
-        if !self.messenger.is_null() {
-            self.instance
-                .destroy_debug_utils_messenger_ext(Some(self.messenger), None);
+        unsafe {
+            self.allocator
+                .cleanup(EruptMemoryDevice::wrap(&self.device));
+            self.device.destroy_device(None);
+            self.instance.destroy_surface_khr(Some(self.surface), None);
+            if !self.messenger.is_null() {
+                self.instance
+                    .destroy_debug_utils_messenger_ext(Some(self.messenger), None);
+            }
+            self.instance.destroy_instance(None);
         }
-        self.instance.destroy_instance(None);
-    }}
+    }
 }

@@ -81,7 +81,9 @@ impl Swapchain {
     }
     pub fn cleanup(&mut self, physical: &Physical) {
         unsafe {
-            physical.device.destroy_swapchain_khr(Some(self.swapchain), None);
+            physical
+                .device
+                .destroy_swapchain_khr(Some(self.swapchain), None);
             for &image_view in self.image_views.iter() {
                 physical.device.destroy_image_view(Some(image_view), None);
             }

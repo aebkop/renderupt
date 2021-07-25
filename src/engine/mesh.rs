@@ -1,6 +1,9 @@
 extern crate nalgebra as na;
 
-use std::{mem::{size_of, size_of_val}, u32};
+use std::{
+    mem::{size_of, size_of_val},
+    u32,
+};
 
 use bytemuck_derive::{Pod, Zeroable};
 use erupt::vk::{
@@ -16,7 +19,7 @@ use super::device::Physical;
 #[derive(Debug)]
 pub struct AllocatedBuffer {
     pub buffer: vk::Buffer,
-    pub allocation: Option<MemoryBlock<DeviceMemory>>
+    pub allocation: Option<MemoryBlock<DeviceMemory>>,
 }
 
 struct AllocatedImage {
@@ -125,46 +128,45 @@ pub fn load(path: &std::path::Path) -> Vec<Vertex> {
 }
 impl Mesh {
     pub fn new(path: &std::path::Path, physical: &mut Physical) -> Self {
-   //     let triangle_data = load(path); 
-   let mut triangle_data: Vec<Vertex> = vec![];
+        //     let triangle_data = load(path);
+        let mut triangle_data: Vec<Vertex> = vec![];
 
-   let (models, materials) = tobj::load_obj(
-       path,
-       &tobj::LoadOptions {
-           triangulate: true,
-           single_index: true,
-           ..Default::default()
-       },
-   )
-   .expect("Failed to OBJ load file");
+        let (models, materials) = tobj::load_obj(
+            path,
+            &tobj::LoadOptions {
+                triangulate: true,
+                single_index: true,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to OBJ load file");
 
-   let mesh = &models[0].mesh;
+        let mesh = &models[0].mesh;
 
-   for idx in &mesh.indices {
-       let i = *idx as usize;
-       let pos = [
-           mesh.positions[3 * i],
-           mesh.positions[3 * i + 1],
-           mesh.positions[3 * i + 2],
-       ];
-       let normal = if !mesh.normals.is_empty() {
-           [
-               mesh.normals[3 * i],
-               mesh.normals[3 * i + 1],
-               mesh.normals[3 * i + 2],
-           ]
-       } else {
-           [0.0, 0.0, 0.0]
-       };
-       let color = normal.clone();
+        for idx in &mesh.indices {
+            let i = *idx as usize;
+            let pos = [
+                mesh.positions[3 * i],
+                mesh.positions[3 * i + 1],
+                mesh.positions[3 * i + 2],
+            ];
+            let normal = if !mesh.normals.is_empty() {
+                [
+                    mesh.normals[3 * i],
+                    mesh.normals[3 * i + 1],
+                    mesh.normals[3 * i + 2],
+                ]
+            } else {
+                [0.0, 0.0, 0.0]
+            };
+            let color = normal.clone();
 
-       triangle_data.push(Vertex { pos, normal, color })
-   }
+            triangle_data.push(Vertex { pos, normal, color })
+        }
 
         println!("path {:?}, len {}", path, triangle_data.len());
         let data: &[u8] = bytemuck::cast_slice(&triangle_data);
         let size = size_of_val(data);
-        
 
         let buffer_info = vk::BufferCreateInfoBuilder::new()
             .size(size as u64)
@@ -172,37 +174,40 @@ impl Mesh {
 
         let mut block = unsafe {
             physical.allocator.alloc(
-                    EruptMemoryDevice::wrap(&physical.device),
-                    Request {
-                        size: size as u64,
-                        align_mask: 1,
-                        usage: UsageFlags::HOST_ACCESS,
-                        memory_types: !0,
-                    },
-                )
-            }.unwrap();
-                    
-        unsafe {
-            block.write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data).unwrap();
+                EruptMemoryDevice::wrap(&physical.device),
+                Request {
+                    size: size as u64,
+                    align_mask: 1,
+                    usage: UsageFlags::HOST_ACCESS,
+                    memory_types: !0,
+                },
+            )
         }
-        
+        .unwrap();
+
+        unsafe {
+            block
+                .write_bytes(EruptMemoryDevice::wrap(&physical.device), 0, data)
+                .unwrap();
+        }
+
         let buffer = unsafe { physical.device.create_buffer(&buffer_info, None, None) }.unwrap();
 
         unsafe {
-            physical.device.bind_buffer_memory(buffer, *block.memory(), 0).unwrap();
+            physical
+                .device
+                .bind_buffer_memory(buffer, *block.memory(), 0)
+                .unwrap();
         }
 
         let allocated_buff = AllocatedBuffer {
             buffer,
-            allocation: Some(block)
+            allocation: Some(block),
         };
 
         Mesh {
-            verticies:  triangle_data,
-            vertex_buffer: (
-                allocated_buff
-            ),
+            verticies: triangle_data,
+            vertex_buffer: (allocated_buff),
         }
-
     }
 }
