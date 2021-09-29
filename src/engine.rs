@@ -49,9 +49,9 @@ impl VulkanApp {
 
         let render_pass = RenderPass::new(&mut physical, &swapchain);
 
-        let frames = Frames::new(2, &mut physical);
+        let mut descs = Descriptors::new(&mut physical);
 
-        let descs = Descriptors::new(&physical);
+        let frames = Frames::new(2, &mut physical, &mut descs);
 
         let pipeline = PipelineStruct::new(&physical, &render_pass, &descs);
 

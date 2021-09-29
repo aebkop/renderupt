@@ -5,7 +5,7 @@ use gpu_alloc_erupt::EruptMemoryDevice;
 
 extern crate nalgebra as na;
 
-use super::{buffer::create_buffer, device::Physical, mesh::AllocatedBuffer};
+use super::{buffer::create_buffer, descriptors::Descriptors, device::Physical, mesh::AllocatedBuffer};
 
 use bytemuck_derive::{Pod, Zeroable};
 
@@ -16,6 +16,7 @@ pub struct Frame {
     pub command_pool: vk::CommandPool,
     pub command_buffer: vk::CommandBuffer,
     pub camera_buffer: AllocatedBuffer,
+    pub global_descriptor: vk::DescriptorSet,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -30,7 +31,7 @@ pub struct Frames {
 }
 
 impl Frames {
-    pub fn new(frame_count: u32, physical: &mut Physical) -> Self {
+    pub fn new(frame_count: u32, physical: &mut Physical, descs: &mut Descriptors) -> Self {
         let mut frames: Vec<Frame> = Vec::with_capacity(2);
         for i in 0..frame_count {
             let fence_info =
@@ -85,8 +86,38 @@ impl Frames {
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
                 gpu_alloc::UsageFlags::UPLOAD,
             );
-            
-            
+
+            let global_set_layout = &[descs.global_set_layout];
+
+            let allocate_info = vk::DescriptorSetAllocateInfoBuilder::new()
+                .descriptor_pool(descs.descriptor_pool)
+                .set_layouts(global_set_layout);
+
+            let global_descriptor = * unsafe {
+                physical.device.allocate_descriptor_sets(&allocate_info).unwrap().get(0).unwrap()
+            };
+            //descriptor buffe for camera r
+            let buffer_info = vk::DescriptorBufferInfoBuilder::new()
+                .buffer(buffer.buffer)
+                .offset(0)
+                .range(size_of::<GPUCameraData>() as u64);
+
+            let buffers_info = [buffer_info];
+
+            let write_info = vk::WriteDescriptorSetBuilder::new()
+                .dst_binding(0)
+                .dst_set(global_descriptor)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&buffers_info);           
+
+            let copy_desc_info = vk::CopyDescriptorSetBuilder::new()
+                .dst_set(global_descriptor)
+                .src_set(global_descriptor);
+                
+            unsafe {
+                physical.device.update_descriptor_sets(&[write_info], &[copy_desc_info])
+            }
+                
 
             frames.push(Frame {
                 present_semaphore,
@@ -95,9 +126,10 @@ impl Frames {
                 command_pool,
                 command_buffer: command_buffer[0],
                 camera_buffer: buffer,
+                global_descriptor: global_descriptor,
             })
-        }
-        Frames { frames }
+        };
+        Frames { frames } 
     }
     pub fn cleanup(&mut self, physical: &mut Physical) {
         for frame in &mut self.frames {
@@ -117,10 +149,13 @@ impl Frames {
                 physical
                     .device
                     .destroy_buffer(Some(frame.camera_buffer.buffer), None);
+
+                    
+                
                 physical.allocator.dealloc(
                     EruptMemoryDevice::wrap(&physical.device),
                     frame.camera_buffer.allocation.take().unwrap(),
-                )
+                );
             }
         }
     }

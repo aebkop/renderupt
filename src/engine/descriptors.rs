@@ -51,12 +51,13 @@ impl Descriptors {
 
     pub fn cleanup(&mut self, physical: &mut Physical) {
         unsafe {
+            println!("PLEASE SAY WE GET HERE");
+            physical
+            .device
+            .destroy_descriptor_pool(Some(self.descriptor_pool), None);
             physical
                 .device
                 .destroy_descriptor_set_layout(Some(self.global_set_layout), None);
-            physical
-                .device
-                .destroy_descriptor_pool(Some(self.descriptor_pool), None);
         }
     }
 }
