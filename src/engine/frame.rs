@@ -21,9 +21,9 @@ pub struct Frame {
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct GPUCameraData {
-    pub view: na::Matrix3<f32>,
-    pub projection: na::Matrix3<f32>,
-    pub viewproj: na::Matrix3<f32>,
+    pub view: na::Matrix4<f32>,
+    pub projection: na::Matrix4<f32>,
+    pub viewproj: na::Matrix4<f32>,
 }
 
 pub struct Frames {

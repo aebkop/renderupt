@@ -22,12 +22,7 @@ use winit::window::Window;
 
 use crate::engine::{descriptors::Descriptors, device::Physical, frame::Frames, mesh::Vertex, renderpass::RenderPass, swapchain::Swapchain};
 
-use self::{
-    frame::Frame,
-    mesh::Mesh,
-    pipeline::PipelineStruct,
-    scene::{Material, Scene},
-};
+use self::{frame::{Frame, GPUCameraData}, mesh::Mesh, pipeline::PipelineStruct, scene::{Material, Scene}};
 
 //This needs to be in order of what needs to be destroyed first - The Drop trait destroys them in order of declaration, i.e the first item is destroyed first.
 pub struct VulkanApp {
@@ -197,6 +192,16 @@ impl VulkanApp {
             200.0,
         )
         .into_inner();
+
+        let cam_data:  = GPUCameraData {
+            view: eye
+            projection: projection
+            viewproj: todo!(), 
+        }
+        cam_data.proj = projection;
+        cam_data.view = view;
+        cam_data.viewproj = projection * view;
+    
         let mut last_material: Option<&Material> = None;
         for (a, b, c) in self.scene.objects.iter() {
             let material = self.scene.materials.get(b);

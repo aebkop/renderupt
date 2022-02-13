@@ -51,7 +51,6 @@ impl Descriptors {
 
     pub fn cleanup(&mut self, physical: &mut Physical) {
         unsafe {
-            println!("PLEASE SAY WE GET HERE");
             physical
             .device
             .destroy_descriptor_pool(Some(self.descriptor_pool), None);
