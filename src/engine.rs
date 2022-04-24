@@ -193,14 +193,14 @@ impl VulkanApp {
         )
         .into_inner();
 
-        let cam_data:  = GPUCameraData {
-            view: eye
-            projection: projection
-            viewproj: todo!(), 
-        }
-        cam_data.proj = projection;
-        cam_data.view = view;
-        cam_data.viewproj = projection * view;
+
+        let cam_data  = GPUCameraData {
+            view: view.to_homogeneous(),
+            projection: projection,
+            viewproj: projection * view.to_homogeneous(),
+        };
+
+        
     
         let mut last_material: Option<&Material> = None;
         for (a, b, c) in self.scene.objects.iter() {
